@@ -1,8 +1,7 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-import sys, math
-sys.path.append('./')
+import math
 from utils.modules_helper import LSTM
 from utils.dynamic_helper import single_integrator, double_integrator, double_integrator_3d, rollout_batch_two_agents
 from utils.dynamic_helper import kinematic_model, quadrotor

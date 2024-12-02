@@ -1,6 +1,5 @@
 import torch
 import os
-import math
 
 # obstacles
 obs = torch.tensor([0.0, 1., 0.0, 1., 0.0, 2.0]).float()     # red box in bottom right corner

@@ -1,4 +1,4 @@
-from stlcg_package.src import stlcg
+from src import stlcg
 import torch
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation

@@ -3,4 +3,4 @@ torch
 numpy
 IPython
 seaborn
-git+https://github.com/StanfordASL/stlcg.git
+git+https://github.com/StanfordASL/stlcg.git@master
