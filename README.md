@@ -42,7 +42,7 @@ python3 scripts/test_nash.py --dynamic rotor
 python3 todo
 ```
 
-## Citation and Contact
+<!-- ## Citation and Contact
 If you find this work useful, please consider citing:
 
 ```
@@ -54,4 +54,4 @@ If you find this work useful, please consider citing:
 }
 ```
 
-If you have any question on this repo, please feel free to contact the author Shuo Yang (yangs1 at seas dot upenn dot edu) or raise an issue.
+If you have any question on this repo, please feel free to contact the author Shuo Yang (yangs1 at seas dot upenn dot edu) or raise an issue. -->
