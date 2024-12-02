@@ -1,5 +1,5 @@
 # STLGame
-[Website](https://sites.google.com/view/stlgame), [Preprint](https://sites.google.com/view/stlgame).
+<!-- [Website](https://sites.google.com/view/stlgame), [Preprint](https://sites.google.com/view/stlgame). -->
 
 ## Install
 The implementation has been tested with `Python 3.10` under `Mac M3`. We recommend installing the simulation inside a virtualenv. You can install the environment by running:
@@ -11,6 +11,7 @@ python3 -m venv STLGame_env
 source STLGame_env/bin/activate
 pip install -r requirements.txt.
 ```
+We use [stlcg](https://github.com/StanfordASL/stlcg) to compute the gradient of STL formula.
 
 ## Reproduce the results
 
@@ -41,13 +42,7 @@ python3 scripts/test_nash.py --dynamic rotor
 python3 todo
 ```
 
-## Acknowledgement
-We use [stlcg](https://github.com/StanfordASL/stlcg) to compute the gradient of STL formula.
-
-## Contact
-If you have any question on this repo, please feel free to contact the author Shuo Yang (yangs1 at seas dot upenn dot edu) or raise an issue.
-
-## Citation
+## Citation and Contact
 If you find this work useful, please consider citing:
 
 ```
@@ -58,3 +53,5 @@ If you find this work useful, please consider citing:
   year={2024}
 }
 ```
+
+If you have any question on this repo, please feel free to contact the author Shuo Yang (yangs1 at seas dot upenn dot edu) or raise an issue.
