@@ -23,7 +23,7 @@ export PYTHONPATH=$PYTHONPATH:$
 
 ## Training
 
-The trained model is saved in ()
+The trained model is saved in the folder `models/`, and trajectory and exploitability data is saved in `data/`.
 To reproduce the training, please run (for instance, for autonomous drones case):
 ```bash
 python3 scripts/main.py --dynamic rotor
@@ -42,16 +42,16 @@ python3 scripts/test_nash.py --dynamic rotor
 python3 todo
 ```
 
-<!-- ## Citation and Contact
+## Citation and Contact
 If you find this work useful, please consider citing:
 
 ```
 @article{yang2024STLGame,
   title={STLGame: Signal Temporal Logic Games in Adversarial Multi-Agent Systems},
-  author={Shuo Yang, Hongrui Zheng, Cristian-Ioan Vasile, George J. Pappas, Rahul Mangharam},
-  journal={arXiv preprint},
+  author={Yang, Shuo and Zheng, Hongrui and Vasile, Cristian-Ioan and Pappas, George J and Mangharam, Rahul}
+  journal={arXiv preprint arXiv:2412.01656},
   year={2024}
 }
 ```
 
-If you have any question on this repo, please feel free to contact the author Shuo Yang (yangs1 at seas dot upenn dot edu) or raise an issue. -->
+If you have any question on this repo, please feel free to contact the author Shuo Yang (yangs1 at seas dot upenn dot edu) or raise an issue.
