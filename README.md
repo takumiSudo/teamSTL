@@ -1,5 +1,5 @@
 # STLGame
-<!-- [Website](https://sites.google.com/view/stlgame), [Preprint](https://sites.google.com/view/stlgame). -->
+[Website](https://sites.google.com/view/stlgame), [Preprint](https://arxiv.org/pdf/2412.01656).
 
 ## Install
 The implementation has been tested with `Python 3.10` under `Mac M3`. We recommend installing the simulation inside a virtualenv. You can install the environment by running:
