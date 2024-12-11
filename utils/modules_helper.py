@@ -3,8 +3,14 @@ import torch.nn as nn
 from torch.distributions.normal import Normal
 import torch.distributions as distributions
 import torch.nn.functional as F
+import numpy as np
 
 torch.manual_seed(1)
+
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
 
 class LSTM(nn.Module):
 
@@ -73,3 +79,67 @@ class LSTM(nn.Module):
 
     def act(self, trajectory):
         return self.forward(trajectory)
+
+
+class RecurrentAgent(nn.Module):
+    def __init__(self, hidden_dim, state_dim, action_dim, action_max):
+        super().__init__()
+
+        self.hidden_dim = hidden_dim
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.action_max = action_max
+        self.action_min = -action_max
+
+        # shared recurrent layer
+        self.lstm = nn.LSTM(
+            input_size=state_dim, hidden_size=hidden_dim, num_layers=1, batch_first=True
+        )
+
+        # decouple action and value
+        self.actor_mean = nn.Sequential(
+            layer_init(nn.Linear(hidden_dim, hidden_dim)),
+            nn.ReLU(),
+            layer_init(nn.Linear(hidden_dim, action_dim)),
+        )
+        self.actor_logstd = nn.Parameter(torch.zeros(1, action_dim))
+
+        self.value_net = nn.Sequential(
+            layer_init(nn.Linear(hidden_dim, hidden_dim)),
+            nn.ReLU(),
+            layer_init(nn.Linear(hidden_dim, 1)),
+        )
+
+    def get_value(self, x, cell=None):
+        x, (hidden, _) = self.lstm(x, cell)
+        return self.value_net(hidden)
+
+    def get_action_and_value(self, x, action=None, cell=None):
+        x, (hidden, _) = self.lstm(x, cell)
+        action_mean = self.actor_mean(hidden)
+        action_logstd = self.actor_logstd.expand_as(action_mean)
+        action_std = torch.exp(action_logstd)
+        probs = Normal(action_mean, action_std)
+        if action is None:
+            action = probs.sample()
+            logprob = probs.log_prob(action).sum(1)
+            action = torch.clamp(action, min=self.action_min, max=self.action_max)
+        else:
+            logprob = probs.log_prob(action).sum(1)
+        return (
+            action,
+            logprob,
+            probs.entropy().sum(1),
+            self.value_net(hidden),
+        )
+
+    def act(self, x, cell=None):
+        x, (hidden, _) = self.lstm(x, cell)
+        action_mean = self.actor_mean(hidden)
+        action_logstd = self.actor_logstd.expand_as(action_mean)
+        action_std = torch.exp(action_logstd)
+        probs = Normal(action_mean, action_std)
+        action = probs.sample()
+        logprob = probs.log_prob(action).sum(1)
+        action = torch.clamp(action, min=self.action_min, max=self.action_max)
+        return action, logprob

@@ -27,3 +27,6 @@ Temporary Items
 
 STLgame_env/
 *.pyc
+.vscode/settings.json
+.vscode/
+wandb/

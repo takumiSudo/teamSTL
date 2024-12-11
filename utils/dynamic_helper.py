@@ -161,3 +161,68 @@ def rollout_batch_two_agents(args, init_state_ego, init_state_opp, policy_ego, p
     
     return current_traj, control_seq, log_prob_seq
     
+# get a batch of trajectories using policy for two agents with values (they run at the same time)
+def rollout_batch_two_agents_with_value(
+    args, init_state_ego, init_state_opp, policy_ego, policy_opp
+):
+
+    if init_state_ego.shape[1] < args.state_dim:
+        init_state_ego = torch.cat(
+            (init_state_ego, torch.zeros(1, args.state_dim - init_state_ego.shape[1])),
+            dim=1,
+        )
+        init_state_opp = torch.cat(
+            (init_state_opp, torch.zeros(1, args.state_dim - init_state_opp.shape[1])),
+            dim=1,
+        )
+    init_state = torch.cat((init_state_ego, init_state_opp), dim=1)
+    current_state = init_state.repeat(
+        args.batch_size, 1, 1
+    )  # batch_size * 1 * (2*state_dim)
+    current_traj = current_state  # batch_size * state_dim * 1
+    control_seq = torch.zeros(
+        (args.batch_size, args.total_time_step - 1, args.control_dim * 2)
+    )  # batch_size * (total_time_step - 1) * control_dim
+    log_prob_seq = torch.zeros(
+        (args.batch_size, args.total_time_step - 1, args.control_dim * 2)
+    )  # same dim, store log_prob of the current action
+    value_seq = torch.zeros(args.batch_size, args.total_time_step - 1, 2)
+
+    for time in range(args.total_time_step - 1):
+        action_ego, log_prob_ego, entropy_ego, value_ego = (
+            policy_ego.get_action_and_value(current_traj)
+        )  # batch_size * action_dim
+        action_opp, log_prob_opp, entropy_opp, value_opp = (
+            policy_opp.get_action_and_value(current_traj)
+        )  # batch_size * action_dim
+
+        current_state_ego = args.dynamic_ego(
+            current_state[..., : args.state_dim],
+            action_ego,
+            batch_first=args.batch_first,
+        )
+        current_state_opp = args.dynamic_opp(
+            current_state[..., args.state_dim :],
+            action_opp,
+            batch_first=args.batch_first,
+        )
+
+        current_state = torch.cat((current_state_ego, current_state_opp), dim=2)
+        current_traj = torch.cat((current_traj, current_state), dim=1)
+        control_seq[:, time : time + 1, : args.control_dim] = action_ego.reshape(
+            args.batch_size, 1, args.control_dim
+        )
+        control_seq[:, time : time + 1, args.control_dim :] = action_opp.reshape(
+            args.batch_size, 1, args.control_dim
+        )
+        if log_prob_ego is not None:
+            log_prob_seq[:, time : time + 1, : args.control_dim] = log_prob_ego
+        if log_prob_opp is not None:
+            log_prob_seq[:, time : time + 1, args.control_dim :] = log_prob_opp
+
+        if value_ego is not None:
+            value_seq[:, time : time + 1, 0] = value_ego
+        if value_opp is not None:
+            value_seq[:, time : time + 1, 1] = value_opp
+
+    return current_traj, control_seq, log_prob_seq, value_seq

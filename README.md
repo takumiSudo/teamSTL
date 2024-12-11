@@ -23,7 +23,7 @@ export PYTHONPATH=$PYTHONPATH:$
 
 ## Training
 
-The trained model is saved in the folder `models/`, and trajectory and exploitability data is saved in `data/`.
+The trained model is saved in the folder `models/`, and trajectory and exploitability data is saved in `data/`. To change the directories used, change `scripts/config.py` and `scripts/config_3d.py` for `kinematic` and `rotor` dynamics correspondingly.
 To reproduce the training, please run (for instance, for autonomous drones case):
 ```bash
 python3 scripts/main.py --dynamic rotor
@@ -39,7 +39,7 @@ python3 scripts/test_nash.py --dynamic rotor
 
 ## RL Training for Best Response
 ```bash
-python3 todo
+python3 scripts/main_rlbr.py --dynamic rotor
 ```
 
 ## Citation and Contact
