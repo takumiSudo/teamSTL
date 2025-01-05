@@ -9,7 +9,7 @@ git clone git@github.com:shuoyang2000/STLgame.git
 cd STLgame
 python3 -m venv STLGame_env
 source STLGame_env/bin/activate
-pip install -r requirements.txt.
+pip install -r requirements.txt
 ```
 We use [stlcg](https://github.com/StanfordASL/stlcg) to compute the gradient of STL formula.
 
