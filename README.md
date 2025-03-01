@@ -1,6 +1,8 @@
 # STLGame
 [Website](https://sites.google.com/view/stlgame), [Preprint](https://arxiv.org/pdf/2412.01656).
 
+News: This paper is accepted by the 2025 Learning for Dynamics & Control Conference (L4DC'25).
+
 ## Install
 The implementation has been tested with `Python 3.10` under `Mac M3`. We recommend installing the simulation inside a virtualenv. You can install the environment by running:
 
