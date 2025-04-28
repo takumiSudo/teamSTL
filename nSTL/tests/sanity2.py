@@ -5,10 +5,10 @@ import torch
 import matplotlib.pyplot as plt
 from matplotlib import animation
 
-from src.env import MultiAgentEnv, batched_rollout
+from env.dynamic_env import MultiAgentEnv, batched_rollout
 from robust.team_stl_helper import STLFormulaReachAvoidTeam
 from config.team_config import ConfigTeam
-from src.dynamic_helper import (
+from env.dynamic_helper import (
     single_integrator,
     double_integrator,
     kinematic_model,

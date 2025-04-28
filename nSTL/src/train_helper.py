@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import random
 import copy
-from nSTL.src.dynamic_helper import rollout_batch_two_agents, rollout_batch_two_agents_with_value
+from env.dynamic_helper import rollout_batch_two_agents, rollout_batch_two_agents_with_value
 
 random.seed(0)
 np.random.seed(seed=0)
