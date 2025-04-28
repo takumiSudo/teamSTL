@@ -34,4 +34,4 @@ wandb/
 
 nSTL/artifact
 nSTL/__pycache__
-nSTL/protosrc
+nSTL/__protosrc
