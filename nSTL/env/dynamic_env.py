@@ -1,6 +1,6 @@
 from src.interfaces import EnvWrapper, PolicyBase
 import torch
-from src.dynamic_helper import (
+from dynamic_helper import (
     single_integrator,
     double_integrator,
     kinematic_model,
@@ -98,7 +98,7 @@ def batched_rollout(
 if __name__ == "__main__":
     import torch
     from src.interfaces import PolicyBase
-    import src.dynamic_helper as dynamic_helper
+    import dynamic_helper as dynamic_helper
 
     # 1) A trivial zero‐action policy for testing
     class ZeroPolicy(PolicyBase):
