@@ -80,7 +80,7 @@ class ZeroPolicy(PolicyBase):
 if __name__ == "__main__":
     TOTAL_T = 50
     SAFE_D  = torch.tensor(0.25)
-    SAVE_DIR = "figs/team/env_tests/"
+    SAVE_DIR = "artifact/figs/team/env_tests/"
 
     # reuse obstacles & circle from config
     cfg    = ConfigTeam([], [])

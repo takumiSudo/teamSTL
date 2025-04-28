@@ -6,7 +6,7 @@
 from robust.stlcg import stlcg
 import torch
 from typing import Tuple, List
-from nSTL.robust.stl_helper import *
+from robust.stl_helper import *
 
 # -------------------------------------------------------
 # Helper: create an stlcg.Expression for a constant tensor

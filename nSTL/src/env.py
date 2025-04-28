@@ -1,6 +1,6 @@
-from nSTL.src.interfaces import EnvWrapper, PolicyBase
+from src.interfaces import EnvWrapper, PolicyBase
 import torch
-from nSTL.src.dynamic_helper import (
+from src.dynamic_helper import (
     single_integrator,
     double_integrator,
     kinematic_model,
@@ -97,8 +97,8 @@ def batched_rollout(
 
 if __name__ == "__main__":
     import torch
-    from nSTL.src.interfaces import PolicyBase
-    import nSTL.src.dynamic_helper as dynamic_helper
+    from src.interfaces import PolicyBase
+    import src.dynamic_helper as dynamic_helper
 
     # 1) A trivial zero‐action policy for testing
     class ZeroPolicy(PolicyBase):
