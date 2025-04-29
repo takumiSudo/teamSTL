@@ -1,6 +1,6 @@
 from src.interfaces import EnvWrapper, PolicyBase
 import torch
-from dynamic_helper import (
+from env.dynamic_helper import (
     single_integrator,
     double_integrator,
     kinematic_model,

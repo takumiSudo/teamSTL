@@ -43,7 +43,7 @@ class LSTM(nn.Module):
             action = self.deterministic_forward(trajectory)
             action = torch.clamp(action, min=self.action_min, max=self.action_max)
             return action, None
-        
+    
 
     def deterministic_forward(self, trajectory):
         if self.batch_first:
@@ -77,8 +77,18 @@ class LSTM(nn.Module):
 
         return action, log_prob
 
-    def act(self, trajectory):
+    def act(self, trajectory, hidden = None, deterministic: bool = False):
         return self.forward(trajectory)
+
+    def reset(self, batch_size: int):
+        """
+        Return zero-initialized (h0, c0) for LSTM
+        """
+        num_layers = self.lstm.num_layers
+        device = next(self.parameters()).device
+        h0 = torch.zeros(num_layers, batch_size, self.hidden_dim, device=device)
+        c0 = torch.zeros(num_layers, batch_size, self.hidden_dim, device=device)
+        return (h0, c0)
 
 
 class RecurrentAgent(nn.Module):

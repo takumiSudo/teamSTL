@@ -15,6 +15,10 @@ from env.dynamic_helper import (
     double_integrator_3d,
     quadrotor,
 )
+from policy.modules_helper import LSTM
+from policy.team_modules_helper import JointPolicy
+
+
 
 # ----------------- helper: linear interp --------------------
 def line_traj(start_xy, goal_xy, T):
@@ -66,20 +70,6 @@ def animate_scene(ego_trajs, opp_trajs, obstacles, circle, fname, SAVE_DIR):
     plt.close(fig)
     print(f"Saved animation: {path}")
 
-# ----------------- zero-action policy -----------------------
-from policy.modules_helper import LSTM
-from policy.team_modules_helper import JointPolicy
-
-# suppose 2 agents per team, each partial‐policy is an LSTM returning (action, hidden, {})
-agent_policies = [ LSTM(input_dim=sd, hidden_dim=64, output_dim=cd)
-                 for _ in range(2) ]
-team_policy = JointPolicy(agent_policies)
-
-# in your rollout:
-h0 = team_policy.reset(batch_size=B)
-action, h1, _ = team_policy.act(joint_obs, h0)
-
-
 if __name__ == "__main__":
     TOTAL_T = 50
     SAFE_D  = torch.tensor(0.25)
@@ -116,17 +106,33 @@ if __name__ == "__main__":
         assert ((init >= -1.0) & (init <= 1.0)).all(), \
             f"Initial states out of bounds: min={init.min().item():.3f}, max={init.max().item():.3f}"
 
-        # rollout with zero-policy
-        # joint policies for 2 agents per team
+        # 2 agents per team → two LSTMs each predicting TOTAL_T steps of actions
+
         agent_policies_A = [
-            LSTM(input_dim=sd, hidden_dim=64, output_dim=cd)
+            LSTM(
+            hidden_dim=64,           # or your chosen hidden size
+            pred_length=TOTAL_T,     
+            state_dim=sd,            # single‐agent state dim
+            action_dim=cd,           # single‐agent control dim
+            stochastic_policy=False,
+            batch_first=True,
+            action_max=1.0           # or your safe max
+            )
             for _ in range(2)
         ]
         policy_A = JointPolicy(agent_policies_A)
-        h0_A = policy_A.reset(batch_size=B)
+        h0_A     = policy_A.reset(batch_size=B)
 
         agent_policies_B = [
-            LSTM(input_dim=sd, hidden_dim=64, output_dim=cd)
+            LSTM(
+            hidden_dim=64,
+            pred_length=TOTAL_T,
+            state_dim=sd,
+            action_dim=cd,
+            stochastic_policy=False,
+            batch_first=True,
+            action_max=1.0
+            )
             for _ in range(2)
         ]
         policy_B = JointPolicy(agent_policies_B)

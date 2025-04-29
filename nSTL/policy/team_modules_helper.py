@@ -57,6 +57,7 @@ class JointPolicy(PolicyBase):
             obs_i = obs_slices[idx]            # shape (B,1,sd_per_agent)
             hid_i = hidden[idx] if hidden else None
             # each policy returns (action_i, hidden_i_new, info_i)
+            print(f"act : {obs_i, hid_i}")
             a_i, h_i_new, info_i = p.act(obs_i, hid_i, deterministic=deterministic)
             actions.append(a_i)                     # expect (B, action_dim)
             new_hiddens.append(h_i_new)
