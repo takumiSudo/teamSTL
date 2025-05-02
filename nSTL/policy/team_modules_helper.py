@@ -13,11 +13,13 @@ A JointPolicy:
 from typing import List, Optional, Tuple, Dict
 import torch
 from torch import Tensor
+import torch.nn as nn
 from src.interfaces import PolicyBase
+from policy.modules_helper import LSTM, RecurrentAgent
 
 
 class JointPolicy(PolicyBase):
-    def __init__(self, agent_policies: List[PolicyBase]):
+    def __init__(self, agent_policies: List[LSTM]):
         """
         agent_policies: list of length n_agents,
                         each maps obs_i -> (action_i, hidden_i, info_i)
@@ -57,10 +59,8 @@ class JointPolicy(PolicyBase):
             obs_i = obs_slices[idx]            # shape (B,1,sd_per_agent)
             hid_i = hidden[idx] if hidden else None
             # each policy returns (action_i, hidden_i_new, info_i)
-            print(f"act : {obs_i, hid_i}")
-            a_i, h_i_new, info_i = p.act(obs_i, hid_i, deterministic=deterministic)
+            a_i, info_i = p.act(obs_i, hid_i, deterministic=deterministic)
             actions.append(a_i)                     # expect (B, action_dim)
-            new_hiddens.append(h_i_new)
             # optionally merge info dicts under keys 'agent0', 'agent1', …
             infos[f"agent{idx}"] = info_i
 

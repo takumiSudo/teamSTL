@@ -73,7 +73,7 @@ def animate_scene(ego_trajs, opp_trajs, obstacles, circle, fname, SAVE_DIR):
 if __name__ == "__main__":
     TOTAL_T = 50
     SAFE_D  = torch.tensor(0.25)
-    SAVE_DIR = "artifact/figs/team/env_tests/"
+    SAVE_DIR = "artifact/figs/team/env_tests/sanity3/"
 
     # reuse obstacles & circle from config
     cfg    = ConfigTeam([], [])
