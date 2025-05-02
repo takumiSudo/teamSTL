@@ -18,6 +18,18 @@ class MultiAgentEnv(EnvWrapper):
         self.batch_first = True
         self.current_state: torch.Tensor | None = None
 
+    @property
+    def get_state_dim(self):
+        return self.state_dim
+
+    @property
+    def get_control_dim(self):
+        return self.control_dim
+
+    @property
+    def get_n_agents(self):
+        return self.n_agents
+
     def reset(self, batch: torch.Tensor) -> torch.Tensor:
         """
         batch:        (B, n_agents * state_dim) tensor of flattened initial states

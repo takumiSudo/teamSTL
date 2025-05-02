@@ -1,6 +1,7 @@
 import torch
 import os
 import random
+from torch import device, cuda
 
 # obstacles
 obstacles = [
@@ -12,7 +13,7 @@ obstacles = [
 ]
 
 class ConfigTeam:
-    def __init__(self, ego_choices, opp_choices, total_time_step=50, T=5, u_max=0.8, 
+    def __init__(self, ego_choices, opp_choices, total_time_step=50, T=5, u_max=0.8, epochs = 40,
                  model_dir='artifact/models/team/', data_dir='artifact/data/team/', exp_fig_dir='artifact/figs/team/'):
         self.ego_choices = ego_choices
         self.opp_choices = opp_choices
@@ -22,6 +23,8 @@ class ConfigTeam:
         self.model_dir = model_dir
         self.data_dir = data_dir
         self.exp_fig_dir = exp_fig_dir
+        self.epochs = epochs
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         os.makedirs(self.model_dir, exist_ok=True)
         os.makedirs(self.data_dir, exist_ok=True)

@@ -19,7 +19,7 @@ from policy.modules_helper import LSTM, RecurrentAgent
 
 
 class JointPolicy(PolicyBase):
-    def __init__(self, agent_policies: List[LSTM]):
+    def __init__(self, agent_policies: List[LSTM], team_id: str):
         """
         agent_policies: list of length n_agents,
                         each maps obs_i -> (action_i, hidden_i, info_i)
@@ -28,6 +28,10 @@ class JointPolicy(PolicyBase):
         self.policies = agent_policies
         # assume all agents use the same hidden‐state structure/size
         self.n_agents = len(agent_policies)
+        self.team_id = team_id
+
+    def __name__(self):
+        return self.team_id
 
     def reset(self, batch_size: int = 1):
         """
@@ -70,3 +74,24 @@ class JointPolicy(PolicyBase):
         return joint_action, new_hiddens, infos
 
 
+
+def make_joint_policy(team_size, sd, cd, TOTAL_T, device, team_id):
+    """
+    Batch function to quickly build Team of LSTM agents
+    # TODO: Extend to Reccurrent Agent??
+    """
+    agents = [
+        LSTM(
+            hidden_dim=64,
+            pred_length=TOTAL_T,
+            state_dim = sd,
+            action_dim= cd,
+            stochastic_policy=False,
+            batch_first=True,
+            action_max=1.0
+        )
+        for _ in range(team_size)
+    ]
+    jp = JointPolicy(agents, team_id)
+    jp.to(device)
+    return jp
