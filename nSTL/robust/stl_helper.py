@@ -180,10 +180,22 @@ class STLFormulaReachAvoidTwoAgents():
         return formula
     
     def compute_robustness_ego(self, traj_ego, traj_opp, scale=-1):
+        # Extract only the (x,y) coordinates in case traj_ego carries full agent state
+        traj_ego_xy = traj_ego[..., :2]
+        # Replace traj_ego with only the x-y slice
+        traj_ego = traj_ego_xy
         x, y = traj_ego[..., :1], traj_ego[..., 1:]
         box_inputs = ((x, x),(y, y))
 
-        circle_inputs = torch.norm(traj_ego - self.obs_3[:2].unsqueeze(0), dim=-1, keepdim=True)
+        center = self.obs_3[:2]
+        print(f"traj-ego : {traj_ego.dim()}")
+        if traj_ego.dim() == 3:
+            # traj_ego: (B, T, 2)
+            center = center.view(1, 1, -1).expand(traj_ego.shape[0], traj_ego.shape[1], -1)
+        elif traj_ego.dim() == 2:
+            # traj_ego: (T, 2)
+            center = center.view(1, -1).expand(traj_ego.shape[0], -1)
+        circle_inputs = torch.norm(traj_ego - center, dim=-1, keepdim=True)
         agents_collision_inputs = torch.norm(traj_ego - traj_opp, dim=-1, keepdim=True)
         robustness = self.formula_ego.robustness((((box_inputs, box_inputs), circle_inputs), agents_collision_inputs), scale=scale)
         return robustness

@@ -83,7 +83,7 @@ class OracleBase(ABC):
     """
 
     @abstractmethod
-    def train_best_response(
+    def train(
         self,
         team_id: int,
         opponent_meta: "Population",

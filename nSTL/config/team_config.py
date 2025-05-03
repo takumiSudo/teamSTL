@@ -13,7 +13,7 @@ obstacles = [
 ]
 
 class ConfigTeam:
-    def __init__(self, ego_choices, opp_choices, total_time_step=50, T=5, u_max=0.8, epochs = 40,
+    def __init__(self, ego_choices, opp_choices, total_time_step=50, T=5, u_max=0.8, epochs = 40, lr = 1e-3, batch_size = 8,
                  model_dir='artifact/models/team/', data_dir='artifact/data/team/', exp_fig_dir='artifact/figs/team/'):
         self.ego_choices = ego_choices
         self.opp_choices = opp_choices
@@ -24,7 +24,9 @@ class ConfigTeam:
         self.data_dir = data_dir
         self.exp_fig_dir = exp_fig_dir
         self.epochs = epochs
+        self.batch_size = batch_size
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.lr = lr
         
         os.makedirs(self.model_dir, exist_ok=True)
         os.makedirs(self.data_dir, exist_ok=True)

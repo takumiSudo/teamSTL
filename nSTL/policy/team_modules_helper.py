@@ -18,14 +18,14 @@ from src.interfaces import PolicyBase
 from policy.modules_helper import LSTM, RecurrentAgent
 
 
-class JointPolicy(PolicyBase):
+class JointPolicy(PolicyBase, nn.Module):
     def __init__(self, agent_policies: List[LSTM], team_id: str):
         """
         agent_policies: list of length n_agents,
                         each maps obs_i -> (action_i, hidden_i, info_i)
         """
         super().__init__()
-        self.policies = agent_policies
+        self.policies = nn.ModuleList(agent_policies)
         # assume all agents use the same hidden‐state structure/size
         self.n_agents = len(agent_policies)
         self.team_id = team_id
@@ -93,5 +93,4 @@ def make_joint_policy(team_size, sd, cd, TOTAL_T, device, team_id):
         for _ in range(team_size)
     ]
     jp = JointPolicy(agents, team_id)
-    jp.to(device)
     return jp
