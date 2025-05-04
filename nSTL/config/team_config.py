@@ -60,10 +60,10 @@ class ConfigTeam:
 
 
 def generate_start_end_positions():
-    x1 = random.uniform(-1, 1)
-    y1 = random.uniform(-1, 1)
-    x2 = random.uniform(-1, 1)
-    y2 = random.uniform(-1, 1)
+    x1 = random.uniform(-1, 0)
+    y1 = random.uniform(-1, 0)
+    x2 = random.uniform(0, 1)
+    y2 = random.uniform(0, 1)
     return [x1, y1, x2, y2]
 
 if __name__ == "__main__":
