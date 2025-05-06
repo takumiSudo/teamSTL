@@ -18,7 +18,7 @@ from policy.modules_helper import LSTM
 from policy.team_modules_helper import JointPolicy, make_joint_policy
 from policy.Oracle import JointSTLOracle  
 from policy.PSRO import PSRODriver, ZeroSumMetaSolver
-import wandb
+# import wandb
 
 
 # ----------------- helper: animate -------------------------
@@ -69,7 +69,7 @@ def animate_scene(ego_trajs, opp_trajs, obstacles, circle, fname, SAVE_DIR):
 if __name__ == "__main__":
     TOTAL_T = 50
     SAFE_D  = torch.tensor(0.25)
-    SAVE_DIR = "artifact/figs/team/env_tests/sanity_4/"
+    SAVE_DIR = "artifact/figs/team/env_tests/sanity_5/"
 
     # config & obstacles
     cfg    = ConfigTeam([], [])
@@ -90,24 +90,23 @@ if __name__ == "__main__":
     for name, (func, (sd, cd)) in dynamics.items():
         print(f"\n=== {name} ===")
         # initialize wandb for this dynamics
-        wandb.init(
-            project="team-stl-psro",
-            name=name,
-            reinit="finish_previous",
-            config={
-                'dynamics': name,
-                'fsp_iterations': cfg.fsp_iteration,
-                'epochs': cfg.epochs,
-                'batch_size': cfg.batch_size,
-                'lr': cfg.lr
-            }
-        )
+        # wandb.init(
+        #     project="team-stl-psro",
+        #     name=name,
+        #     config={
+        #         'dynamics': name,
+        #         'fsp_iterations': cfg.fsp_iteration,
+        #         'epochs': cfg.epochs,
+        #         'batch_size': cfg.batch_size,
+        #         'lr': cfg.lr
+        #     }
+        # )
         # full PSRO loop
         driver = PSRODriver(cfg, func, sd, cd, team_size=2)
         for itr in range(cfg.fsp_iteration):
             exploit = driver.iterate()
-            wandb.log({'iteration': itr, 'exploitability': exploit})
-        wandb.finish()
+        #     wandb.log({'iteration': itr, 'exploitability': exploit})
+        # wandb.finish()
 
         # final rollout & compute robustness
         final_env = driver.env

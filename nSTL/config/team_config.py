@@ -34,7 +34,7 @@ class ConfigTeam:
         
         self.hidden_dim = 32
         self.pred_len = 1
-        self.fsp_iteration = 50
+        self.fsp_iteration = 10
         
     def compute_ref_trajs(self):
         ref_X_ego = []
