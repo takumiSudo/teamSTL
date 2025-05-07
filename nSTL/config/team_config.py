@@ -13,7 +13,7 @@ obstacles = [
 ]
 
 class ConfigTeam:
-    def __init__(self, ego_choices, opp_choices, total_time_step=50, T=5, u_max=0.8, epochs = 40, lr = 1e-3, batch_size = 8,
+    def __init__(self, ego_choices, opp_choices, total_time_step=100, T=5, u_max=0.8, epochs = 40, lr = 1e-3, batch_size = 8,
                  model_dir='artifact/models/team/', data_dir='artifact/data/team/', exp_fig_dir='artifact/figs/team/'):
         self.ego_choices = ego_choices
         self.opp_choices = opp_choices
@@ -34,7 +34,7 @@ class ConfigTeam:
         
         self.hidden_dim = 32
         self.pred_len = 1
-        self.fsp_iteration = 10
+        self.fsp_iteration = 100
         
     def compute_ref_trajs(self):
         ref_X_ego = []

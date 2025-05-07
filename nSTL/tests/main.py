@@ -22,59 +22,48 @@ from env.dynamic_helper import (
 )
 from policy.PSRO import PSRODriver
 
-# -------------------------------------------------------------
-# nicer animation helper
-# -------------------------------------------------------------
+def animate(ego_trajs, opp_trajs, obstacles, circle, fname, SAVE_DIR):
+    os.makedirs(SAVE_DIR, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(6,6))
+    ax.set_xlim(-1.2,1.2); ax.set_ylim(-1.2,1.2)
+    ax.set_aspect("equal"); ax.grid()
 
-def fancy_anim(ego_trajs, opp_trajs, obstacles, circle, save_path):
-    """Render the two‑team rollout with fading trails and start/goal markers."""
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
-    T = ego_trajs[0].shape[0]
-    fig, ax = plt.subplots(figsize=(6, 6))
-    ax.set_xlim(-1.2, 1.2)
-    ax.set_ylim(-1.2, 1.2)
-    ax.set_aspect("equal")
-    ax.set_title("Team‑PSRO Roll‑out")
-    ax.grid(ls=":", lw=0.5)
-
-    # obstacles
+    # plot obstacles once
     obs1, obs2 = obstacles[:2]
-    for obs, c in zip((obs1, obs2), ("#d62728", "#2ca02c")):
+    for obs, color in zip((obs1, obs2), ("r","g")):
         xlo, xhi, ylo, yhi = obs
-        ax.fill([xlo, xhi, xhi, xlo], [ylo, ylo, yhi, yhi], alpha=0.3, color=c)
+        ax.plot([xlo,xlo,xhi,xhi,xlo],[ylo,yhi,yhi,ylo,ylo], color)
 
-    # circle region
-    cx, cy, r = circle
-    ang = torch.linspace(0, 2 * torch.pi, 200)
-    ax.plot(cx + r * torch.cos(ang), cy + r * torch.sin(ang), "#1f77b4", lw=1.5)
+    # plot circle
+    cx, cy, rad = circle
+    ang = torch.linspace(0,2*torch.pi,100)
+    ax.plot(cx + rad*torch.cos(ang),
+            cy + rad*torch.sin(ang), "b")
 
-    # draw fading trails (collections of Line2D)
-    trails_ego = [ax.plot([], [], color="#ff7f0e", alpha=a)[0] for a in torch.linspace(0.2, 1.0, 10)]
-    trails_opp = [ax.plot([], [], color="#9467bd", alpha=a)[0] for a in torch.linspace(0.2, 1.0, 10)]
+    ego_line, = ax.plot([], [], '-o', c='orange', label='ego')
+    opp_line, = ax.plot([], [], '-o', c='purple', label='opp')
+    ax.legend()
 
-    head_ego, = ax.plot([], [], "o", c="#ff7f0e", ms=6, label="ego team")
-    head_opp, = ax.plot([], [], "o", c="#9467bd", ms=6, label="opp team")
-    ax.legend(loc="upper right")
+    def init():
+        ego_line.set_data([], []); opp_line.set_data([], [])
+        return ego_line, opp_line
 
-    def update(t):
-        # tails of length 10
-        for k in range(10):
-            idx = max(t - k, 0)
-            e_xy = torch.vstack([tr[idx] for tr in ego_trajs]).cpu()
-            o_xy = torch.vstack([tr[idx] for tr in opp_trajs]).cpu()
-            trails_ego[k].set_data(e_xy[:, 0], e_xy[:, 1])
-            trails_opp[k].set_data(o_xy[:, 0], o_xy[:, 1])
-        # heads
-        head_ego.set_data(e_xy[:, 0], e_xy[:, 1])
-        head_opp.set_data(o_xy[:, 0], o_xy[:, 1])
-        return trails_ego + trails_opp + [head_ego, head_opp]
+    def animate(t):
+        ego_xy = torch.vstack([traj[t] for traj in ego_trajs]).detach().cpu().numpy()
+        opp_xy = torch.vstack([traj[t] for traj in opp_trajs]).detach().cpu().numpy()
+        ego_line.set_data(ego_xy[:, 0], ego_xy[:, 1])
+        opp_line.set_data(opp_xy[:, 0], opp_xy[:, 1])
+        return ego_line, opp_line
 
-    ani = animation.FuncAnimation(
-        fig, update, frames=T, interval=60, blit=True)
-    ani.save(save_path, writer="pillow")
+    anim = animation.FuncAnimation(
+        fig, animate, init_func=init,
+        frames=ego_trajs[0].shape[0],
+        interval=80, blit=True
+    )
+    path = os.path.join(SAVE_DIR, fname)
+    anim.save(path, writer="pillow")
     plt.close(fig)
-    print(f"Animation saved → {save_path}")
+    print(f"Saved animation: {path}")
 
 # -------------------------------------------------------------
 # main routine
@@ -85,7 +74,7 @@ def main():
     parser.add_argument("--dyn", default="single_integrator",
                         choices=["single_integrator", "double_integrator", "kinematic_model", "double_integrator_3d", "quadrotor"],
                         help="dynamics model")
-    parser.add_argument("--iters", type=int, default=10, help="PSRO iterations")
+    parser.add_argument("--iters", type=int, default=100, help="PSRO iterations")
     parser.add_argument("--epochs", type=int, default=200, help="oracle training epochs")
     parser.add_argument("--batch", type=int, default=256, help="oracle RL batch size")
     parser.add_argument("--lr", type=float, default=3e-4, help="oracle learning rate")
@@ -113,10 +102,10 @@ def main():
     driver = PSRODriver(cfg, dyn_fn, state_dim, ctrl_dim, team_size=2)
     for it in range(args.iters):
         exp = driver.iterate()
-        wandb.log({"iteration": it, "exploitability": exp})
+        wandb.log({"iteration": it, "exploitability": -exp})
 
     # final rollout for visualisation
-    T = 50
+    T = cfg.T
     traj = batched_rollout(driver.env, driver.pop_A[-1], driver.pop_B[-1], T=T)
     sd = driver.env.state_dim
     pos_dim = 2
@@ -129,7 +118,7 @@ def main():
 
     save_dir = "artifact/figs/results/main"
     gif_path = os.path.join(save_dir, f"{args.dyn}_psro.gif")
-    fancy_anim(ego, opp, driver.cfg.get_obstacles(), driver.cfg.get_obstacles()[2], gif_path)
+    animate(ego, opp, driver.cfg.get_obstacles(), driver.cfg.get_obstacles()[2], gif_path)
     wandb.save(gif_path)
     wandb.finish()
 
