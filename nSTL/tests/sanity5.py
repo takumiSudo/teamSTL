@@ -18,7 +18,7 @@ from policy.modules_helper import LSTM
 from policy.team_modules_helper import JointPolicy, make_joint_policy
 from policy.Oracle import JointSTLOracle  
 from policy.PSRO import PSRODriver, ZeroSumMetaSolver
-# import wandb
+import wandb
 
 
 # ----------------- helper: animate -------------------------
@@ -90,24 +90,23 @@ if __name__ == "__main__":
     for name, (func, (sd, cd)) in dynamics.items():
         print(f"\n=== {name} ===")
         # initialize wandb for this dynamics
-        # wandb.init(
-        #     project="team-stl-psro",
-        #     name=name,
-        #     config={
-        #         'dynamics': name,
-        #         'fsp_iterations': cfg.fsp_iteration,
-        #         'epochs': cfg.epochs,
-        #         'batch_size': cfg.batch_size,
-        #         'lr': cfg.lr
-        #     }
-        # )
+        wandb.init(
+            project="team-stl-psro",
+            name=name,
+            config={
+                'dynamics': name,
+                'fsp_iterations': cfg.fsp_iteration,
+                'epochs': cfg.epochs,
+                'batch_size': cfg.batch_size,
+                'lr': cfg.lr
+            }
+        )
         # full PSRO loop
         driver = PSRODriver(cfg, func, sd, cd, team_size=2)
         for itr in range(cfg.fsp_iteration):
             exploit = driver.iterate()
-        #     wandb.log({'iteration': itr, 'exploitability': exploit})
-        # wandb.finish()
-
+            wandb.log({'iteration': itr, 'exploitability': exploit})
+            
         # final rollout & compute robustness
         final_env = driver.env
         policy_A = driver.pop_A[-1]
@@ -119,7 +118,10 @@ if __name__ == "__main__":
         opp_trajs = [traj[:, :, (2+i)*sd_dim:(2+i)*sd_dim+pos_dim] for i in range(2)]
         rob_ego = driver.stl.compute_robustness_ego(ego_trajs, opp_trajs)
         rob_opp = driver.stl.compute_robustness_opp(ego_trajs, opp_trajs)
+        wandb.log({'final robustness_ego': rob_ego.item(), 'final robustness_opp': rob_opp.item()})
         print(f"After PSRO → Ego robustness: {rob_ego.item():.3f}, Opp robustness: {rob_opp.item():.3f}")
+        wandb.finish()
+
         animate_scene(
             ego_trajs, opp_trajs, OBS, CIRCLE,
             fname=f"{name}_psro.gif", SAVE_DIR=SAVE_DIR

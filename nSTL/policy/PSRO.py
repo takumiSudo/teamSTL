@@ -134,6 +134,8 @@ class PSRODriver:
                 # robustness as payoff
                 r = self.stl.compute_robustness_ego(ego_trajs, opp_trajs)
                 payoff[i, j] = r
+        max_payoff = torch.max(payoff).item()
+        wandb.log({"Robustness": max_payoff})
         return payoff
     
     def iterate(self):
