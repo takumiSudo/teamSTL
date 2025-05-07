@@ -28,8 +28,8 @@ class ConfigTeam:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.lr = lr
         
-        os.makedirs(self.model_dir, exist_ok=True)
-        os.makedirs(self.data_dir, exist_ok=True)
+        # os.makedirs(self.model_dir, exist_ok=True)
+        # os.makedirs(self.data_dir, exist_ok=True)
         os.makedirs(self.exp_fig_dir, exist_ok=True)
         
         self.hidden_dim = 32
