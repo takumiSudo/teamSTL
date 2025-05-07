@@ -90,7 +90,7 @@ def main():
     dyn_fn, state_dim, ctrl_dim = dyn_map[args.dyn]
 
     # basic config
-    cfg = ConfigTeam([], [])
+    cfg = ConfigTeam([-1.0, -1.0], [0.5, 0.5])
     cfg.fsp_iteration = args.iters
     cfg.epochs = args.epochs
     cfg.batch_size = args.batch
@@ -102,7 +102,18 @@ def main():
     driver = PSRODriver(cfg, dyn_fn, state_dim, ctrl_dim, team_size=2)
     for it in range(args.iters):
         exp = driver.iterate()
-        wandb.log({"iteration": it, "exploitability": -exp})
+        wandb.log({"exploitability": -exp})
+        if it % 5 == 0:
+            T = cfg.T
+            traj = batched_rollout(driver.env, driver.pop_A[-1], driver.pop_B[-1], T=T)
+            sd = driver.env.state_dim
+            pos_dim = 2
+            ego = [traj[:, :, i*sd:(i*sd)+pos_dim] for i in range(2)]
+            opp = [traj[:, :, (2+i)*sd:(2+i)*sd+pos_dim] for i in range(2)]
+            gif_path = os.path.join("artifact/figs/results/main", f"{args.dyn}_psro_{it}.gif")
+            animate(ego, opp, driver.cfg.get_obstacles(), driver.cfg.get_obstacles()[2], gif_path, "artifact/figs/results/main")
+            print(f"Saved Animation for Iteration {it}")
+            wandb.save(gif_path)
 
     # final rollout for visualisation
     T = cfg.T
