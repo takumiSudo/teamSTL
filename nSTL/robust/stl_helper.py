@@ -188,7 +188,6 @@ class STLFormulaReachAvoidTwoAgents():
         box_inputs = ((x, x),(y, y))
 
         center = self.obs_3[:2]
-        print(f"traj-ego : {traj_ego.dim()}")
         if traj_ego.dim() == 3:
             # traj_ego: (B, T, 2)
             center = center.view(1, 1, -1).expand(traj_ego.shape[0], traj_ego.shape[1], -1)

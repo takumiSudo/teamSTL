@@ -4,4 +4,5 @@ numpy
 IPython
 seaborn
 wandb
+cvxpy
 git+https://github.com/StanfordASL/stlcg.git@master

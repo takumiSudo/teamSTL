@@ -8,6 +8,9 @@ from policy.modules_helper import LSTM
 from config.team_config import ConfigTeam
 from policy.team_modules_helper import JointPolicy, make_joint_policy
 import random
+from torch.distributions import Categorical
+import wandb
+from tqdm import trange
 
 
 class JointSTLOracle(OracleBase):
@@ -29,7 +32,7 @@ class JointSTLOracle(OracleBase):
         self.cfg = cfg 
         self.t = total_t
         self.epochs  = getattr(cfg, "epochs", 1)
-        self.lr      = getattr(cfg, "lr", 1e-3)
+        self.lr      = getattr(cfg, "lr", 1e-4)
 
 
         # GET Property values
@@ -37,46 +40,176 @@ class JointSTLOracle(OracleBase):
         self.sd = self.env.get_state_dim
         self.cd = self.env.get_control_dim
 
+    # --------------------------------------------------------------------- #
+    # rollout helper                                                        #
+    # --------------------------------------------------------------------- #
+    def _one_rollout(
+        self,
+        joint_policy: JointPolicy,
+        opp_policy: LSTM,
+        init_states: torch.Tensor,
+    ):
+        """Run a single rollout and compute STL robustness (no gradients)."""
+        env = self.env
+        sd = self.sd
+        env.reset(init_states)
+        _ = joint_policy.reset(init_states.size(0))
+        _ = opp_policy.reset(init_states.size(0))
+
+        traj = batched_rollout(env, joint_policy, opp_policy, self.t)
+        ego_trajs = [traj[:, :, i * sd:(i + 1) * sd] for i in range(self.team_size)]
+        opp_size = env.n_agents - self.team_size
+        opp_trajs = [traj[:, :, (self.team_size + k) * sd:
+                                   (self.team_size + k + 1) * sd]
+                     for k in range(opp_size)]
+        rob = self.stl.compute_robustness_ego(ego_trajs, opp_trajs)
+        return traj, rob
+
+    # --------------------------------------------------------------------- #
+    # opponent selection helpers                                            #
+    # --------------------------------------------------------------------- #
+    def _select_worst_opponent(
+        self,
+        joint_policy: JointPolicy,
+        opp_meta: List[LSTM],
+        init_states: torch.Tensor,
+    ) -> LSTM:
+        """
+        Return the opponent policy from `opp_meta` that minimises STL robustness
+        against `joint_policy` for the provided initial states.
+
+        Args
+        ----
+        joint_policy : the current (gradient‑bearing) ego joint policy
+        opp_meta     : list of opponent policies in the meta‑population
+        init_states  : tensor (B, n_agents * state_dim) of starting states
+
+        Notes
+        -----
+        * Runs without gradient tracking so the overhead is just forward passes.
+        * Each opponent is evaluated on the SAME initial states to keep the
+          comparison fair.
+        """
+        env = self.env
+        sd = self.sd
+        worst_pol = opp_meta[0]
+        worst_val = float("inf")
+
+        with torch.no_grad():
+            for pol in opp_meta:
+                # reset env and both policies
+                env.reset(init_states)
+                _ = joint_policy.reset(init_states.size(0))
+                _ = pol.reset(init_states.size(0))
+
+                traj = batched_rollout(env, joint_policy, pol, self.t)
+
+                # slice trajectories into ego/opp positional traces
+                ego_trajs = [traj[:, :, i * sd:(i + 1) * sd]                      # ego agents
+                             for i in range(self.team_size)]
+                opp_size = env.n_agents - self.team_size
+                opp_trajs = [traj[:, :, (self.team_size + k) * sd:
+                                          (self.team_size + k + 1) * sd]
+                             for k in range(opp_size)]
+
+                rob = self.stl.compute_robustness_ego(ego_trajs, opp_trajs)
+                val = rob.mean().item()
+                if val < worst_val:
+                    worst_val = val
+                    worst_pol = pol
+        return worst_pol
+
     def train(
-            self, 
-            team_id: str, 
-            opp_meta: List[LSTM]
-    )-> JointPolicy:
-        joint_policy = make_joint_policy(team_size=self.team_size, sd=self.sd, cd=self.cd, device=self.cfg.device, TOTAL_T=self.t, team_id=team_id)
+            self,
+            team_id: str,
+            opp_meta: List[LSTM],
+            mu_opp: torch.Tensor = None,
+            payoff_queue=None,
+            driver=None,
+            flush_every: int = 50,
+    ) -> JointPolicy:
+        """
+        Train a joint best‑response.
+
+        Parameters
+        ----------
+        team_id : "A" or "B"
+        opp_meta : list of opponent joint policies
+        mu_opp : tensor of shape (len(opp_meta),) – meta‑strategy of the opponent
+                 (if None, uniform distribution is used)
+        payoff_queue : optional queue to push (self_idx, opp_idx, robustness)
+        driver : optional PSRODriver; if provided we call driver.flush_payoff_queue()
+                 every `flush_every` epochs and refresh mu_opp from driver.mu_B / mu_A.
+        flush_every : how often (epochs) to flush and refresh
+        """
+        device = self.cfg.device
+        if mu_opp is None:
+            mu_opp = torch.ones(len(opp_meta), device=device, dtype=torch.float32) / len(opp_meta)
+        else:
+            # make sure mu_opp is a torch tensor on the correct device
+            if not torch.is_tensor(mu_opp):
+                mu_opp = torch.tensor(mu_opp, device=device, dtype=torch.float32)
+            else:
+                mu_opp = mu_opp.to(device=device, dtype=torch.float32)
+        # ensure it sums to 1 to avoid numerical issues
+        mu_opp = mu_opp / mu_opp.sum()
+
+        dist = Categorical(mu_opp)
+
+        # build new joint policy
+        joint_policy = make_joint_policy(
+            team_size=self.team_size,
+            sd=self.sd,
+            cd=self.cd,
+            device=device,
+            TOTAL_T=self.t,
+            team_id=team_id,
+        )
         optimizer = torch.optim.Adam(joint_policy.parameters(), self.lr)
-        print(f"Constructed Joint Policy for Team {team_id}")
-        print(joint_policy)
+        print(f"[Oracle] Constructed Joint Policy for Team {team_id}")
 
-        for _ in range(self.epochs):
-            env = self.env
-            # initialize full state for all agents (both teams)
-            B = self.cfg.batch_size
-            total_sd = env.n_agents * self.sd
-            opp_policy = random.choice(opp_meta)
-            # sample random initial positions uniformly in [-1,1]
-            init = (torch.rand(B, total_sd, device=self.cfg.device) * 2.0 - 1.0).requires_grad_(True)
-            sd = self.sd
-            env.reset(init)
+        B = self.cfg.batch_size
+        total_sd = self.env.n_agents * self.sd
 
-            h_team = joint_policy.reset(B)
-            _ = opp_policy.reset(B)
+        for epoch in trange(self.epochs, desc=f"Oracle {team_id}", leave=False):
+            # sample opponent according to meta‑mix
+            opp_idx = dist.sample().item()
+            opp_policy = opp_meta[opp_idx]
 
-            traj = batched_rollout(env, joint_policy, opp_policy, self.t)
-            ego_trajs = [traj[:, :, i*sd:(i+1)*sd] for i in range(self.team_size)]
-            opp_size  = env.n_agents - self.team_size
-            opp_trajs = [traj[:, :, (self.team_size+i)*sd:(self.team_size+i+1)*sd]
-                         for i in range(opp_size)]
+            # sample random initial states
+            init = (torch.rand(B, total_sd, device=device) * 2.0 - 1.0).requires_grad_(True)
 
-
-            # compute differentiable STL robustness
-            print("ego_trajs:", [t.shape for t in ego_trajs], ego_trajs[0])
-            print("opp_trajs:", [t.shape for t in opp_trajs], opp_trajs[0])
-            rob = self.stl.compute_robustness_ego(ego_trajs, opp_trajs)
+            # rollout and compute robustness *with gradients*
+            traj, rob = self._one_rollout(joint_policy, opp_policy, init)
             loss = -rob.mean()
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            # --- WandB logging --------------------------------------------------
+            if (epoch + 1) % flush_every == 0:
+                wandb.log({
+                    f"{team_id}/oracle_loss": loss.item(),
+                    f"{team_id}/robustness": rob.detach().mean().item(),
+                    f"{team_id}/epoch": epoch + 1
+                })
+                
+
+
+            # send payoff sample to driver (no grad)
+            if payoff_queue is not None:
+                payoff_queue.put((team_id, opp_idx, rob.detach().mean().item()))
+
+            # periodically flush queue and refresh μ
+            if (epoch + 1) % flush_every == 0 and driver is not None:
+                if hasattr(driver, "flush_payoff_queue"):
+                    driver.flush_payoff_queue()
+                    # refresh opponent mix
+                    new_mix = torch.tensor(
+                        driver.mu_B if team_id == "A" else driver.mu_A,
+                        device=device,
+                    )
+                    dist = Categorical(new_mix)
 
         return joint_policy
 

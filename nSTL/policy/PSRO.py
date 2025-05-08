@@ -8,6 +8,7 @@ from policy.team_modules_helper import make_joint_policy, JointPolicy
 from policy.Oracle import JointSTLOracle
 from env.dynamic_env import *
 import wandb
+from tqdm import trange
 
 class ZeroSumMetaSolver:
     """
@@ -51,7 +52,14 @@ class ZeroSumMetaSolver:
             prob2.solve()
             muB_val = muB.value
             w_val = w.value
-            exploit = float(v_val - w_val)
+            # At equilibrium v <= w; exploitability is the gap w - v ≥ 0
+            exploit = float(w_val - v_val)
+            if exploit < -1e-9:
+                raise ValueError(
+                    f"Exploitability became negative ({exploit:.4e}) in LP solver; "
+                    "check payoff sign conventions."
+                )
+            exploit = max(exploit, 0.0)
             return muA_val, muB_val, exploit
 
         elif self.method == 'FP':
@@ -107,45 +115,77 @@ class PSRODriver:
         # Initialize populations with one random joint policy each
         self.pop_A = [make_joint_policy(team_size, state_dim, ctrl_dim, cfg.total_time_step, cfg.device, "A")]
         self.pop_B = [make_joint_policy(team_size, state_dim, ctrl_dim, cfg.total_time_step, cfg.device, "B")]
+        # Ensure policy modules are on the correct device
+        for policy in self.pop_A:
+            policy.to(self.cfg.device)
+        for policy in self.pop_B:
+            policy.to(self.cfg.device)
         # Oracle and meta-solver
         self.oracle = JointSTLOracle(cfg=cfg, env=self.env, team_size=team_size, stl_formula=self.stl, total_t=cfg.T)
         self.solver = ZeroSumMetaSolver()
+        self.payoff_cache = {}
+        self.mu_A = np.array([1.0])
+        self.mu_B = np.array([1.0])
 
     def _build_payoff_matrix(self):
         nA, nB = len(self.pop_A), len(self.pop_B)
         payoff = torch.zeros(nA, nB, device=self.cfg.device)
         for i, pi in enumerate(self.pop_A):
             for j, pj in enumerate(self.pop_B):
-                # reset environment to random initial states before rollout
-                init_states = torch.rand(
-                    1, self.env.n_agents * self.env.state_dim,
-                    device=self.cfg.device
-                ) * 2.0 - 1.0
-                self.env.reset(init_states)
-                # rollout trajectories
-                
-                traj = batched_rollout(self.env, pi, pj, T=self.cfg.total_time_step)
-                # slice positions
-                sd = self.env.state_dim
-                pos_dim = 2
-                ego_trajs = [traj[:, :, k*sd:(k*sd+pos_dim)] for k in range(len(pi.policies))]
-                opp_offset = len(pi.policies)
-                opp_trajs = [traj[:, :, ops*sd:(ops*sd+pos_dim)] for ops in range(opp_offset, opp_offset+len(pj.policies))]
-                # robustness as payoff
-                r = self.stl.compute_robustness_ego(ego_trajs, opp_trajs)
-                payoff[i, j] = r
+                if (i, j) not in self.payoff_cache:
+                    r = self._rollout_robustness(pi, pj)  # one rollout only
+                    self.payoff_cache[(i, j)] = r
+                payoff[i, j] = self.payoff_cache[(i, j)]
         max_payoff = torch.max(payoff).item()
-        wandb.log({"Robustness": max_payoff})
+        wandb.log({"Max Robustness": max_payoff})
         return payoff
+
+    # ------------------------------------------------------------------ #
+    # helper: one rollout → robustness                                   #
+    # ------------------------------------------------------------------ #
+    def _rollout_robustness(self, pol_A: JointPolicy, pol_B: JointPolicy):
+        """
+        Roll out a single episode between joint policies pol_A (row player)
+        and pol_B (col player) and return the mean STL robustness of team A.
+
+        The rollout is batched (batch size = cfg.batch_size) to reduce variance.
+        No gradients are recorded.
+        """
+        env = self.env
+        B = self.cfg.batch_size
+        device = self.cfg.device
+        total_sd = env.n_agents * env.state_dim
+
+        with torch.no_grad():
+            # random initial states in [-1, 1]
+            init = torch.rand(B, total_sd, device=device) * 2.0 - 1.0
+            env.reset(init)
+
+            traj = batched_rollout(env, pol_A, pol_B, T=self.cfg.total_time_step)
+
+            sd = env.state_dim
+            pos_dim = 2  # first two dims are (x, y) positions
+            # slice trajectories into per‑agent (x,y) traces
+            ego_trajs = [traj[:, :, k * sd : k * sd + pos_dim]
+                         for k in range(len(pol_A.policies))]
+            opp_offset = len(pol_A.policies)
+            opp_trajs = [traj[:, :, (opp_offset + k) * sd : (opp_offset + k) * sd + pos_dim]
+                         for k in range(len(pol_B.policies))]
+
+            rob_ego = self.stl.compute_robustness_ego(ego_trajs, opp_trajs)
+            rob_opp = -rob_ego
+            wandb.log({"Rob_ego": rob_ego.mean().item(),
+                       "Rob_opp": rob_opp.mean().item()},
+                       commit=False)
+            return rob_ego.mean().item()
     
     def iterate(self):
         # 1) Build payoff
         payoff = self._build_payoff_matrix()
-        # 2) Solve meta-NE
-        mu_A, mu_B, exploit = self.solver.solve(payoff)
-        # 3) Best-response oracles
-        brA = self.oracle.train(team_id="A", opp_meta=self.pop_B)
-        brB = self.oracle.train(team_id="B", opp_meta=self.pop_A)
+        self.mu_A, self.mu_B, exploit = self.solver.solve(payoff)
+        # pass current μ to the oracle
+        brA = self.oracle.train("A", self.pop_B, self.mu_B)
+        brB = self.oracle.train("B", self.pop_A, self.mu_A)
         # 4) Add new policies
         self.pop_A.append(brA)
         self.pop_B.append(brB)
@@ -154,7 +194,7 @@ class PSRODriver:
     def run(self, iterations=None):
         iters = iterations or self.cfg.fsp_iteration
         wandb.config.update({"fsp_iteration": iters})
-        for k in range(iters):
+        for k in trange(iters, desc="PSRO loop"):
             exploit = self.iterate()
             print(f"[PSRO] Iter {k+1}/{iters} exploitability = {exploit:.4f}")
             wandb.log({'exploitability': exploit, 'iteration': k+1})
