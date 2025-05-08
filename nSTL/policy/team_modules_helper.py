@@ -49,6 +49,10 @@ class JointPolicy(PolicyBase, nn.Module):
         hidden: Optional[List] = None,   # list of per-agent hidden states
         deterministic: bool = False
     ) -> Tuple[Tensor, List, Dict]:
+        joint_obs = joint_obs.to(next(self.parameters()).device)
+        if hidden is not None:
+            hidden = [h.to(joint_obs.device) if isinstance(h, torch.Tensor) else h for h in hidden]
+
         B, _, total_sd = joint_obs.shape
         sd_per_agent = total_sd // self.n_agents
 
@@ -77,20 +81,20 @@ class JointPolicy(PolicyBase, nn.Module):
 
 def make_joint_policy(team_size, sd, cd, TOTAL_T, device, team_id):
     """
-    Batch function to quickly build Team of LSTM agents
-    # TODO: Extend to Reccurrent Agent??
+    Build a JointPolicy whose sub‑agents and parameters live on `device`.
     """
-    agents = [
-        LSTM(
+    agents = []
+    for _ in range(team_size):
+        agent = LSTM(
             hidden_dim=64,
             pred_length=TOTAL_T,
-            state_dim = sd,
-            action_dim= cd,
+            state_dim=sd,
+            action_dim=cd,
             stochastic_policy=False,
             batch_first=True,
             action_max=1.0
-        )
-        for _ in range(team_size)
-    ]
-    jp = JointPolicy(agents, team_id)
+        ).to(device)
+        agents.append(agent)
+
+    jp = JointPolicy(agents, team_id).to(device)
     return jp

@@ -5,4 +5,5 @@ IPython
 seaborn
 wandb
 cvxpy
+tqdm 
 git+https://github.com/StanfordASL/stlcg.git@master

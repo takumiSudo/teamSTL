@@ -178,13 +178,17 @@ class STLFormulaReachAvoidTeam:
         return stay_in_box1 & stay_in_box2 & reach_goal_once & always_out_circle
 
     def _stay_outside_circle(self, X):
-        d_expr   = stlcg.Expression('d_circ',
-                                    torch.norm(X - self.circle[:2]
-                                               .unsqueeze(0), dim=-1,
-                                               keepdim=True).unsqueeze(0))
-        r_expr   = stlcg.Expression('r_circ',
-                                    self.circle[2:3]
-                                    .unsqueeze(-1).unsqueeze(-1))
+        center = self.circle[:2].to(X.device)
+        radius = self.circle[2:3].to(X.device)
+        d_expr = stlcg.Expression(
+            'd_circ',
+            torch.norm(X - center.unsqueeze(0), dim=-1,
+                       keepdim=True).unsqueeze(0)
+        )
+        r_expr = stlcg.Expression(
+            'r_circ',
+            radius.unsqueeze(-1).unsqueeze(-1)
+        )
         return stlcg.Always(d_expr > r_expr), d_expr
 
     def _build_ego_formula(self, ego_trajs, opp_trajs):
@@ -223,13 +227,20 @@ class STLFormulaReachAvoidTeam:
         (reuse the original helper that already knows its input tree).
         • Team robustness = min over ego agents.
         """
+        device = ego_trajs[0].device
+        self.safe_d = self.safe_d.to(device)
+        self.obs_1 = self.obs_1.to(device)
+        self.obs_2 = self.obs_2.to(device)
+        self.circle = self.circle.to(device)
+        self.goal = self.goal.to(device)
+
         robvals = []
         for i, Xe in enumerate(ego_trajs):
             # one synthetic opponent trajectory that concatenates ALL opps
             # by taking element-wise min distance (worst case)
             dists = [torch.norm(Xe - Yo, dim=-1, keepdim=True) for Yo in opp_trajs]
             # pick the *closest* opponent at every time step
-            closest = torch.min(torch.stack(dists, dim=0), dim=0).values
+            closest = torch.min(torch.stack(dists, dim=0), dim=0).values.to(device)
             # build 1-v-1 helper with same obstacles & goal
             helper = STLFormulaReachAvoidTwoAgents(self.obs_1, self.obs_2,
                                         self.circle, self.circle,  # obs3, obs4 placeholders

@@ -6,6 +6,7 @@ import numpy as np
 import os
 
 def inside_box(xy, obs):
+    obs = obs.to(xy.device)
     x = stlcg.Expression('x', xy[:,:1].unsqueeze(0))
     y = stlcg.Expression('y', xy[:,1:].unsqueeze(0))
     r1 = stlcg.Expression('x1', obs[:1].unsqueeze(-1).unsqueeze(-1))
@@ -27,8 +28,13 @@ def altitude_rule_3d(xyz, zone_bounds, altitude_bounds):
     return stlcg.Implies(subformula1=((x >= zone_low_bound) & (x <= zone_upper_bound)), subformula2=((z >= altitude_low_bound) & (z <= altitude_upper_bound))), inputs
 
 def always_stay_outside_circle(xy, obs):
-    d1 = stlcg.Expression('d1', torch.norm(xy - obs[:2].unsqueeze(0), dim=-1, keepdim=True).unsqueeze(0))
-    r1 = stlcg.Expression('r', obs[2:3].unsqueeze(-1).unsqueeze(-1))
+    device = xy.device
+    center = obs[:2].to(device)
+    radius = obs[2:3].to(device)
+    d1 = stlcg.Expression('d1',
+                          torch.norm(xy - center.unsqueeze(0),
+                                     dim=-1, keepdim=True).unsqueeze(0))
+    r1 = stlcg.Expression('r', radius.unsqueeze(-1).unsqueeze(-1))
     return stlcg.Always(subformula=(d1 > r1)), d1
 
 def always_stay_outside_unsafe_box_3d(xyz, obs):
@@ -150,6 +156,10 @@ class STLFormulaReachAvoidTwoAgents():
         x_opp = torch.arange(-1, 1, 0.04).reshape(-1, 1)
         y_opp = torch.arange(1, -1, -0.04).reshape(-1, 1)
         ref_X_opp = torch.cat((x_opp, y_opp), dim=1)
+        # ensure reference trajectories live on same device as obstacle tensors
+        device = obs_1.device
+        ref_X_ego = ref_X_ego.to(device)
+        ref_X_opp = ref_X_opp.to(device)
         self.obs_1 = obs_1
         self.obs_2 = obs_2
         self.obs_3 = obs_3

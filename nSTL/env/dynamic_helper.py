@@ -7,6 +7,9 @@ def single_integrator(state, control, batch_first=False, state_dim=2, control_di
     delta_t = 0.1
     A = torch.eye(2)
     B = torch.eye(2) * delta_t
+    device = state.device
+    A = A.to(device)
+    B = B.to(device)
     if not batch_first:
         next_state = A @ state.reshape(state_dim,1) + B @ control[-1,:].reshape(control_dim, 1)
         return next_state.reshape(1, state_dim)
@@ -22,6 +25,9 @@ def double_integrator(state, control, batch_first=False, state_dim=4, control_di
     A = torch.eye(4)
     A[:2, 2:4] = torch.eye(2) * delta_t
     B = torch.cat((torch.zeros(2, 2), delta_t*torch.eye(2)), dim=0)
+    device = state.device
+    A = A.to(device)
+    B = B.to(device)
     if not batch_first:
         next_state = A @ state.reshape(state_dim,1) + B @ control[-1,:].reshape(control_dim, 1)
         return next_state.reshape(1, state_dim)
@@ -70,6 +76,9 @@ def double_integrator_3d(state, control, batch_first=False, state_dim=6, control
     A = torch.block_diag(eye, eye)
     A[:state_dim//2, state_dim//2:] = delta_t*eye
     B = torch.cat((torch.zeros(state_dim//2, control_dim), delta_t*torch.eye(control_dim)), dim=0)
+    device = state.device
+    A = A.to(device)
+    B = B.to(device)
     if not batch_first:
         next_state = A @ state.reshape(state_dim,1) + B @ control[-1,:].reshape(control_dim, 1)
         return next_state.reshape(1, state_dim)
@@ -98,6 +107,9 @@ def quadrotor(state, control, batch_first=False, state_dim=6, control_dim=3):
                     [0, -0.196, 0],
                     [0, 0, 0.04]
                     ])
+    device = state.device
+    A = A.to(device)
+    B = B.to(device)
 
     if not batch_first:
         next_state = A @ state.reshape(state_dim,1) + B @ control[-1,:].reshape(control_dim, 1)

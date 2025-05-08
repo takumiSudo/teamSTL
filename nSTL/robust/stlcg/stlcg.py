@@ -494,10 +494,15 @@ class LessThan(STL_Formula):
         '''
         if isinstance(trace, Expression):
             trace = trace.value
+
+        # ensure rhs lives on same device as trace
         if isinstance(self.val, Expression):
-            return (self.val.value - trace)*pscale
+            rhs = self.val.value.to(trace.device)
         else:
-            return (self.val - trace)*pscale
+            rhs = self.val
+            if isinstance(rhs, torch.Tensor):
+                rhs = rhs.to(trace.device)
+        return (rhs - trace) * pscale
 
     def _next_function(self):
         # expects self.lhs to be a string (used for visualizing the graph)
@@ -541,10 +546,14 @@ class GreaterThan(STL_Formula):
         '''
         if isinstance(trace, Expression):
             trace = trace.value
+
         if isinstance(self.val, Expression):
-            return (trace - self.val.value)*pscale
+            rhs = self.val.value.to(trace.device)
         else:
-            return (trace - self.val)*pscale
+            rhs = self.val
+            if isinstance(rhs, torch.Tensor):
+                rhs = rhs.to(trace.device)
+        return (trace - rhs) * pscale
 
     def _next_function(self):
         # expects self.lhs to be a string (used for visualizing the graph)
@@ -587,10 +596,14 @@ class Equal(STL_Formula):
         '''
         if isinstance(trace, Expression):
             trace = trace.value
-        if isinstance(self.val, Expression):
-            return -torch.abs(trace - self.val.value)*pscale
 
-        return -torch.abs(trace - self.val)*pscale
+        if isinstance(self.val, Expression):
+            rhs = self.val.value.to(trace.device)
+        else:
+            rhs = self.val
+            if isinstance(rhs, torch.Tensor):
+                rhs = rhs.to(trace.device)
+        return -torch.abs(trace - rhs) * pscale
 
     def _next_function(self):
         # if isinstance(self.lhs, Expression):
