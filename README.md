@@ -1,14 +1,29 @@
-# STLGame
-[Website](https://sites.google.com/view/stlgame), [Preprint](https://arxiv.org/pdf/2412.01656).
+# Continuous N-vs-M Team STL Game under TMECor via PSRO + STLCG
 
-News: This paper is accepted by the 2025 Learning for Dynamics & Control Conference (L4DC'25).
+This repository contains the code and documentation for our research on solving continuous‐action, two‐team zero‐sum Signal Temporal Logic (STL) games using a Policy‐Space Response Oracles (PSRO) framework with a differentiable STL backbone (STLCG) to compute Team‐Maxmin Equilibria with ex‐ante Correlation (TMECor).
+
+## 📄 Project Overview
+
+Many real‐world multi‐agent scenarios (e.g. coordinated drone teams, robotic fleets) must satisfy complex temporal‐logic specifications in adversarial environments. Prior work (STLGame) used differentiable STL robustness to solve 2‐player zero‐sum games via generalized fictitious play. We extend this line of research to:
+- **N vs. M team games** (arbitrary team sizes).  
+- **TMECor** solution concept capturing correlated joint strategies.  
+- **PSRO meta‐algorithm** for rapid convergence and richer strategy supports.  
+- **STLCG‐based gradient oracles** for sample‐efficient best‐response computation.
+
+## 🚀 Key Contributions
+
+1. **Problem formulation**: Continuous‐state/action N‐agent vs. M‐agent STL game under TMECor.  
+2. **Differentiable Oracle**: STLCG‐based best‐response via robustness gradient ascent.  
+3. **PSRO pipeline**: Iterative restricted subgame construction, meta‐game LP solver, and strategy expansion (including Mix‐and‐Match).  
+4. **Theoretical guarantees**: Convergence bounds for ε‐approximate oracles.  
+5. **Empirical evaluation**: 1v1 through 4v4 benchmarks, ablation of oracles (gradient vs. PPO‐RL) and solvers (PSRO vs. GWFP).
 
 ## Install
-The implementation has been tested with `Python 3.10` under `Mac M3`. We recommend installing the simulation inside a virtualenv. You can install the environment by running:
+The implementation has been tested with `Python 3.10` under `Mac M1`. We recommend installing the simulation inside a virtualenv. You can install the environment by running:
 
 ```bash
-git clone git@github.com:shuoyang2000/STLgame.git
-cd STLgame
+git clone https://github.com/takumiSudo/teamSTL.git
+cd teamSTL
 python3 -m venv STLGame_env
 source STLGame_env/bin/activate
 pip install -r requirements.txt
@@ -23,29 +38,11 @@ We run all experiments from the project directory so please add the project dire
 export PYTHONPATH=$PYTHONPATH:$
 ```
 
-## Training
-
-The trained model is saved in the folder `models/`, and trajectory and exploitability data is saved in `data/`. To change the directories used, change `scripts/config.py` and `scripts/config_3d.py` for `kinematic` and `rotor` dynamics correspondingly.
-To reproduce the training, please run (for instance, for autonomous drones case):
-```bash
-python3 scripts/main.py --dynamic rotor
-```
-
-It may take around 10 minutes for each FSP iteration, depending on your machines.
-
-## Test Nash policy and best response against seen and unseen opponents
-
-```bash
-python3 scripts/test_nash.py --dynamic rotor
-```
-
-## RL Training for Best Response
-```bash
-python3 scripts/main_rlbr.py --dynamic rotor
-```
+#### Implementation
+🚧 **Coming Soon**: Detailed implementation instructions and example scripts for running experiments. 
 
 ## Citation and Contact
-If you find this work useful, please consider citing:
+Big thanks to the underlying authors of STLGame for providing the building blocks of this codebase.
 
 ```
 @article{yang2024STLGame,
@@ -56,4 +53,3 @@ If you find this work useful, please consider citing:
 }
 ```
 
-If you have any question on this repo, please feel free to contact the author Shuo Yang (yangs1 at seas dot upenn dot edu) or raise an issue.
