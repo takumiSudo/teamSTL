@@ -1,8 +1,8 @@
-"""Main entry point for running Team‑PSRO experiments.
+"""Main entry point for running Team PSRO experiments.
 
 Usage examples
 --------------
-python main.py                              # default single‑integrator 2×2 game
+python main.py                              # default single integrator 2 x 2 game
 python main.py --dyn kinematic_model        # choose a different dynamics
 python main.py --iters 15 --epochs 400       # more PSRO iterations / oracle epochs
 
@@ -23,7 +23,7 @@ from env.dynamic_helper import (
 )
 from policy.PSRO import PSRODriver
 
-def animate(ego_trajs, opp_trajs, obstacles, circle, save_path):
+def animate(ego_trajs, opp_trajs, obstacles, circle, save_path, interval_ms=200):
     """Render the two‑team rollout with fading trails and start/goal markers."""
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     # If a directory with the same name as the target GIF exists from a failed run,
@@ -73,8 +73,7 @@ def animate(ego_trajs, opp_trajs, obstacles, circle, save_path):
         head_opp.set_data(o_xy[:, 0], o_xy[:, 1])
         return trails_ego + trails_opp + [head_ego, head_opp]
 
-    ani = animation.FuncAnimation(
-        fig, update, frames=T, interval=60, blit=True)
+    ani = animation.FuncAnimation(fig, update, frames=T, interval=interval_ms, blit=True)
     ani.save(save_path, writer="pillow")
     plt.close(fig)
     print(f"Animation saved → {save_path}")
@@ -113,7 +112,9 @@ def main():
     cfg.lr = args.lr
 
     # wandb run
-    wandb.init(project="team-stl-psro", name=f"{args.dyn}_main", config=vars(args))
+    wandb.init(project=f"team-stl-psro_{args.dyn}", name=f"{args.dyn}_main_{cfg.T}", config=vars(args))
+    best_robust = float("-inf")
+    best_ego, best_opp = None, None
 
     driver = PSRODriver(cfg, dyn_fn, state_dim, ctrl_dim, team_size=2)
     for it in range(args.iters):
@@ -129,6 +130,19 @@ def main():
             gif_path = os.path.join("artifact/figs/results/main", f"{args.dyn}_psro_{it}.gif")
             animate(ego, opp, driver.cfg.get_obstacles(), driver.cfg.get_obstacles()[2], gif_path)
             wandb.save(gif_path)
+            # track the best‑scoring trajectory so far
+            rob_it = driver.stl.compute_robustness_ego(ego, opp)
+            if rob_it > best_robust:
+                best_robust = rob_it
+                best_ego = [tr.clone() for tr in ego]
+                best_opp = [tr.clone() for tr in opp]
+
+    # visualise the best trajectory obtained during training
+    if best_ego is not None:
+        best_gif_path = os.path.join("artifact/figs/results/main", f"{args.dyn}_best.gif")
+        animate(best_ego, best_opp, driver.cfg.get_obstacles(),
+                driver.cfg.get_obstacles()[2], best_gif_path, interval_ms=300)
+        wandb.save(best_gif_path)
 
     # final rollout for visualisation
     T = 50
@@ -144,7 +158,8 @@ def main():
 
     save_dir = "artifact/figs/results/main"
     gif_path = os.path.join(save_dir, f"{args.dyn}_psro.gif")
-    animate(ego, opp, driver.cfg.get_obstacles(), driver.cfg.get_obstacles()[2], gif_path)
+    animate(ego, opp, driver.cfg.get_obstacles(), driver.cfg.get_obstacles()[2],
+            gif_path, interval_ms=300)
     wandb.save(gif_path)
     wandb.finish()
 

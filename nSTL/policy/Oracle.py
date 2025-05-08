@@ -7,6 +7,7 @@ from robust.team_stl_helper import STLFormulaReachAvoidTeam
 from policy.modules_helper import LSTM
 from config.team_config import ConfigTeam
 from policy.team_modules_helper import JointPolicy, make_joint_policy
+import random
 
 
 class JointSTLOracle(OracleBase):
@@ -41,11 +42,6 @@ class JointSTLOracle(OracleBase):
             team_id: str, 
             opp_meta: List[LSTM]
     )-> JointPolicy:
-
-        # TODO: currently taking the first one, Change to worst (min())? 
-        opp_policy = opp_meta[0]
-        print(opp_policy)
-
         joint_policy = make_joint_policy(team_size=self.team_size, sd=self.sd, cd=self.cd, device=self.cfg.device, TOTAL_T=self.t, team_id=team_id)
         optimizer = torch.optim.Adam(joint_policy.parameters(), self.lr)
         print(f"Constructed Joint Policy for Team {team_id}")
@@ -56,6 +52,7 @@ class JointSTLOracle(OracleBase):
             # initialize full state for all agents (both teams)
             B = self.cfg.batch_size
             total_sd = env.n_agents * self.sd
+            opp_policy = random.choice(opp_meta)
             # sample random initial positions uniformly in [-1,1]
             init = (torch.rand(B, total_sd, device=self.cfg.device) * 2.0 - 1.0).requires_grad_(True)
             sd = self.sd
