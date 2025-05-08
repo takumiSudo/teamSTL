@@ -30,3 +30,8 @@ STLgame_env/
 .vscode/settings.json
 .vscode/
 wandb/
+*__pycache__
+
+nSTL/artifact
+nSTL/__pycache__
+nSTL/__protosrc
