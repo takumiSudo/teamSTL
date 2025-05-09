@@ -56,14 +56,14 @@ class JointSTLOracle(OracleBase):
         _ = joint_policy.reset(init_states.size(0))
         _ = opp_policy.reset(init_states.size(0))
 
-        traj = batched_rollout(env, joint_policy, opp_policy, self.t)
+        traj, acts = batched_rollout(env, joint_policy, opp_policy, self.t)
         ego_trajs = [traj[:, :, i * sd:(i + 1) * sd] for i in range(self.team_size)]
         opp_size = env.n_agents - self.team_size
         opp_trajs = [traj[:, :, (self.team_size + k) * sd:
                                    (self.team_size + k + 1) * sd]
                      for k in range(opp_size)]
         rob = self.stl.compute_robustness_ego(ego_trajs, opp_trajs)
-        return traj, rob
+        return traj, acts, rob
 
     # --------------------------------------------------------------------- #
     # opponent selection helpers                                            #
@@ -127,6 +127,7 @@ class JointSTLOracle(OracleBase):
             payoff_queue=None,
             driver=None,
             flush_every: int = 50,
+            prev_policy = None,
     ) -> JointPolicy:
         """
         Train a joint best‑response.
@@ -167,57 +168,94 @@ class JointSTLOracle(OracleBase):
         )
         optimizer = torch.optim.Adam(joint_policy.parameters(), self.lr)
         print(f"[Oracle] Constructed Joint Policy for Team {team_id}")
-
+        # ---------- hyper-parameters ---------------------------------------------
+        margin      = getattr(self.cfg, "margin", 0.3)
+        ref_weight  = getattr(self.cfg, "ref_loss_weight", 1.0)
+        ctrl_weight = getattr(self.cfg, "ctrl_loss_weight", 0.0)
+        K_opp       = getattr(self.cfg, "k_opponents", 4)          # rollouts / epoch
+        goal_center = torch.tensor([0.0, 0.0], device=device)      # (cx, cy)
+        # -------------------------------------------------------------------------
         B = self.cfg.batch_size
         total_sd = self.env.n_agents * self.sd
 
+ 
         for epoch in trange(self.epochs, desc=f"Oracle {team_id}", leave=False):
-            # sample opponent according to meta‑mix
-            opp_idx = dist.sample().item()
-            opp_policy = opp_meta[opp_idx]
+            total_loss = 0.0
+            total_reward = 0.0
 
-            # sample random initial states
-            init = (torch.rand(B, total_sd, device=device) * 2.0 - 1.0).requires_grad_(True)
+            # draw K opponents from the meta-mix
+            for opp_idx in dist.sample((K_opp,)):
+                opp_policy = opp_meta[opp_idx]
 
-            # share the initial states with the PSRO driver to match distributions
-            if driver is not None:
-                driver._last_init = init.detach().clone()
+                # ---- deterministic (but slightly jittered) start -----------------
+                init = torch.zeros(B, total_sd, device=device)
+                init[:, 0:2] = torch.tensor([-1.0, -1.0], device=device)
+                init[:, 2:4] = torch.tensor([-1.0, -1.0], device=device)
+                init[:, 4:6] = torch.tensor([ 1.0,  1.0], device=device)
+                init[:, 6:8] = torch.tensor([ 1.0,  1.0], device=device)
+                init += 0.02 * torch.randn_like(init)        # tiny exploration noise
+                init = init.requires_grad_(True)
 
-            # rollout and compute robustness *with gradients*
-            traj, rob = self._one_rollout(joint_policy, opp_policy, init)
-            # row player (team A) tries to *maximize* robustness,
-            # column player (team B) tries to *minimize* it — i.e., maximize (-rob)
-            if team_id.upper() == "B":
-                rob = -rob           # flip sign for the opponent team
-            # entropy regulariser (0.01 coeff) for smoother learning
-            entropy = joint_policy.entropy().mean() if hasattr(joint_policy, "entropy") else 0.0
-            loss = -(rob.mean() - 0.01 * entropy)
+                if driver is not None:
+                    driver._last_init = init.detach().clone()
+
+                # rollout – expect (traj, u); if your helper returns only traj,
+                # change the line to `traj, u = self._one_rollout(...)[0], 0.0`
+                traj, u, rob = self._one_rollout(joint_policy, opp_policy, init)
+
+                # slice ego trajectories (positions only, first 2 dims)
+                ego_xy = traj[..., :2]           # shape (B, T, 2)
+
+                # ---------------------- loss terms --------------------------------
+                # 1) margin-shaped robustness reward
+                if team_id.upper() == "B":
+                    rob = -rob                  # opponent minimises robustness
+                reward = -torch.relu(-rob + margin)
+                loss_rob = -reward.mean()
+
+                # 2) reference trajectory: pull to goal centre
+                ref_traj = goal_center.view(1, 1, 2).expand_as(ego_xy)
+                loss_ref = torch.nn.functional.mse_loss(ego_xy, ref_traj)
+
+                # 3) control-effort penalty (L2 norm)
+                loss_ctrl = u.norm()
+
+                # 4) entropy bonus
+                entropy = joint_policy.entropy().mean() if hasattr(joint_policy, "entropy") else 0.0
+
+                loss = (
+                    loss_rob
+                    + ref_weight  * loss_ref
+                    + ctrl_weight * loss_ctrl
+                    - 0.01        * entropy
+                )
+
+                total_loss   += loss
+                total_reward += reward.mean()
+
+                # optional: push payoff sample for this opponent
+                if payoff_queue is not None:
+                    payoff_queue.put((team_id, int(opp_idx), reward.detach().mean().item()))
+
+            # average over K opponents
+            total_loss /= K_opp
+            total_reward /= K_opp
 
             optimizer.zero_grad()
-            loss.backward()
+            total_loss.backward()
             optimizer.step()
-            # --- WandB logging --------------------------------------------------
+
+            # periodic logging / μ refresh
             if (epoch + 1) % flush_every == 0:
                 wandb.log({
-                    f"{team_id}/oracle_loss": loss.item(),
-                    f"{team_id}/robustness": rob.detach().mean().item(),
-                    f"{team_id}/epoch": epoch + 1
+                    f"{team_id}/oracle_loss": total_loss.item(),
+                    f"{team_id}/reward":      total_reward.item(),
+                    f"{team_id}/epoch":       epoch + 1
                 })
-                
-
-
-            # send payoff sample to driver (no grad)
-            if payoff_queue is not None:
-                payoff_queue.put((team_id, opp_idx, rob.detach().mean().item()))
-
-            # periodically flush queue and refresh μ
-            if (epoch + 1) % flush_every == 0 and driver is not None:
-                if hasattr(driver, "flush_payoff_queue"):
+                if driver is not None and hasattr(driver, "flush_payoff_queue"):
                     driver.flush_payoff_queue()
-                    # refresh opponent mix
                     new_mix = torch.tensor(
-                        driver.mu_B if team_id == "A" else driver.mu_A,
-                        device=device,
+                        driver.mu_B if team_id == "A" else driver.mu_A, device=device
                     )
                     dist = Categorical(new_mix)
 

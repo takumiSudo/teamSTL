@@ -189,9 +189,9 @@ def main():
             init_vis[0, 6:8] = torch.tensor(opp_start)  # opp   agent 1
             # ------------------------------------------------------------------
             driver.env.reset(init_vis)                            # set the fixed start
-            traj = batched_rollout(driver.env,
+            traj, _ = batched_rollout(driver.env,
                        driver.pop_A[-1], driver.pop_B[-1],
-                       T=T_vis)                      # no init_states kwarg
+                       T=T_vis)
             sd = driver.env.state_dim
             pos_dim = 2
             ego = [traj[:, :, i*sd:(i*sd)+pos_dim] for i in range(2)]
@@ -218,9 +218,9 @@ def main():
     init_vis[0, 6:8] = torch.tensor(opp_start)  # opp   agent 1
     # ------------------------------------------------------------------
     driver.env.reset(init_vis)                            # set the fixed start
-    traj = batched_rollout(driver.env,
+    traj, _ = batched_rollout(driver.env,
                 driver.pop_A[-1], driver.pop_B[-1],
-                T=T_vis)       
+                T=T_vis)
     sd = driver.env.state_dim
     pos_dim = 2
     ego = [traj[:, :, i*sd:(i*sd)+pos_dim] for i in range(2)]

@@ -16,6 +16,7 @@ from torch import Tensor
 import torch.nn as nn
 from src.interfaces import PolicyBase
 from policy.modules_helper import LSTM, RecurrentAgent
+import copy
 
 
 class JointPolicy(PolicyBase, nn.Module):
@@ -79,10 +80,16 @@ class JointPolicy(PolicyBase, nn.Module):
 
 
 
-def make_joint_policy(team_size, sd, cd, TOTAL_T, device, team_id):
+def make_joint_policy(team_size, sd, cd, TOTAL_T, device, team_id, prev_policy=None):
     """
     Build a JointPolicy whose sub‑agents and parameters live on `device`.
     """
+    # if a previous policy is supplied, deep‑copy it (warm start)
+    if prev_policy is not None:
+        jp = copy.deepcopy(prev_policy).to(device)
+        jp.team_id = team_id          # update label
+        return jp
+
     agents = []
     for _ in range(team_size):
         agent = LSTM(

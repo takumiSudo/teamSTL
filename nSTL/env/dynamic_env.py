@@ -66,18 +66,22 @@ def batched_rollout(
     policy_A: PolicyBase,
     policy_B: PolicyBase,
     T: int
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Runs both teams for T steps, returns full trajectory.
+    Runs both teams for T steps.
 
-    Returns:
-        traj: (B, T+1, n_agents * state_dim)
+    Returns
+    -------
+    traj : (B, T+1, n_agents * state_dim)  – all states
+    acts : (B, T,   n_agents * control_dim) – applied actions, useful for control‑effort penalties
     """
     B          = env.current_state.shape[0]
     n_agents   = env.n_agents
     sd, cd     = env.state_dim, env.control_dim
     traj       = torch.zeros(B, T+1, n_agents * sd, device=env.current_state.device)
     traj[:, 0, :] = env.current_state.squeeze(1)
+
+    acts = torch.zeros(B, T, n_agents * cd, device=env.current_state.device)
 
     # assume first half of agents -> policy_A, second half -> policy_B
     nA = n_agents // 2
@@ -103,24 +107,15 @@ def batched_rollout(
             aB.reshape(B, nB*cd)
         ), dim=1)
 
+        acts[:, t, :] = act
+
         ns = env.step(act)       # (B,1,n_agents*sd)
         traj[:, t+1, :] = ns.squeeze(1)
 
-    return traj
+    return traj, acts
 
 
-# # Differentiable rollout helper for JointSTLOracle, keeps gradients alive
-# def differentiable_rollout(
-#     env: MultiAgentEnv,
-#     policy_A: PolicyBase,
-#     policy_B: PolicyBase,
-#     init_state: torch.Tensor,
-#     T: int,
-#     dt: float = 1.0,
-# ) :
-#     re
-    
-    
+
 
 if __name__ == "__main__":
     import torch

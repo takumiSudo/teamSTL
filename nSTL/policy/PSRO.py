@@ -122,6 +122,8 @@ class PSRODriver:
             policy.to(self.cfg.device)
         # Oracle and meta-solver
         self.oracle = JointSTLOracle(cfg=cfg, env=self.env, team_size=team_size, stl_formula=self.stl, total_t=cfg.T)
+        self.prev_br_A = None
+        self.prev_br_B = None
         self.solver = ZeroSumMetaSolver()
         self.payoff_cache = {}
         self.mu_A = np.array([1.0])
@@ -166,7 +168,7 @@ class PSRODriver:
                 init = torch.rand(B, total_sd, device=device) * 2.0 - 1.0
             env.reset(init)
 
-            traj = batched_rollout(env, pol_A, pol_B, T=self.cfg.total_time_step)
+            traj, _ = batched_rollout(env, pol_A, pol_B, T=self.cfg.total_time_step)
 
             sd = env.state_dim
             pos_dim = 2  # first two dims are (x, y) positions
@@ -191,11 +193,15 @@ class PSRODriver:
         payoff = self._build_payoff_matrix()
         self.mu_A, self.mu_B, exploit = self.solver.solve(payoff)
         # pass current μ to the oracle
-        brA = self.oracle.train("A", self.pop_B, self.mu_B, driver=self)
-        brB = self.oracle.train("B", self.pop_A, self.mu_A, driver=self)
+        brA = self.oracle.train("A", self.pop_B, self.mu_B, driver=self,
+                                prev_policy=self.prev_br_A)
+        brB = self.oracle.train("B", self.pop_A, self.mu_A, driver=self,
+                                prev_policy=self.prev_br_B)
         # 4) Add new policies
         self.pop_A.append(brA)
         self.pop_B.append(brB)
+        self.prev_br_A = brA
+        self.prev_br_B = brB
         return exploit
 
     def run(self, iterations=None):
