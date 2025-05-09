@@ -126,15 +126,17 @@ class PSRODriver:
         self.payoff_cache = {}
         self.mu_A = np.array([1.0])
         self.mu_B = np.array([1.0])
+        # last batch of initial states so that oracle and payoff use the same distribution
+        self._last_init = None
 
-    def _build_payoff_matrix(self):
+    def _build_payoff_matrix(self, K: int = 4):
         nA, nB = len(self.pop_A), len(self.pop_B)
         payoff = torch.zeros(nA, nB, device=self.cfg.device)
         for i, pi in enumerate(self.pop_A):
             for j, pj in enumerate(self.pop_B):
                 if (i, j) not in self.payoff_cache:
-                    r = self._rollout_robustness(pi, pj)  # one rollout only
-                    self.payoff_cache[(i, j)] = r
+                    vals = [self._rollout_robustness(pi, pj) for _ in range(K)]
+                    self.payoff_cache[(i, j)] = float(np.mean(vals))
                 payoff[i, j] = self.payoff_cache[(i, j)]
         max_payoff = torch.max(payoff).item()
         wandb.log({"Max Robustness": max_payoff})
@@ -157,8 +159,11 @@ class PSRODriver:
         total_sd = env.n_agents * env.state_dim
 
         with torch.no_grad():
-            # random initial states in [-1, 1]
-            init = torch.rand(B, total_sd, device=device) * 2.0 - 1.0
+            # use the same initial‑state batch as the oracle (if available)
+            if self._last_init is not None:
+                init = self._last_init.to(device)
+            else:
+                init = torch.rand(B, total_sd, device=device) * 2.0 - 1.0
             env.reset(init)
 
             traj = batched_rollout(env, pol_A, pol_B, T=self.cfg.total_time_step)
@@ -177,6 +182,8 @@ class PSRODriver:
             wandb.log({"Rob_ego": rob_ego.mean().item(),
                        "Rob_opp": rob_opp.mean().item()},
                        commit=False)
+            # clear the cached init so next call can set its own
+            self._last_init = None
             return rob_ego.mean().item()
     
     def iterate(self):
@@ -184,8 +191,8 @@ class PSRODriver:
         payoff = self._build_payoff_matrix()
         self.mu_A, self.mu_B, exploit = self.solver.solve(payoff)
         # pass current μ to the oracle
-        brA = self.oracle.train("A", self.pop_B, self.mu_B)
-        brB = self.oracle.train("B", self.pop_A, self.mu_A)
+        brA = self.oracle.train("A", self.pop_B, self.mu_B, driver=self)
+        brB = self.oracle.train("B", self.pop_A, self.mu_A, driver=self)
         # 4) Add new policies
         self.pop_A.append(brA)
         self.pop_B.append(brB)

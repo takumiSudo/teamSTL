@@ -1,5 +1,6 @@
 from src.interfaces import EnvWrapper, PolicyBase
 import torch
+from typing import Optional
 from env.dynamic_helper import (
     single_integrator,
     double_integrator,
@@ -106,6 +107,20 @@ def batched_rollout(
         traj[:, t+1, :] = ns.squeeze(1)
 
     return traj
+
+
+# # Differentiable rollout helper for JointSTLOracle, keeps gradients alive
+# def differentiable_rollout(
+#     env: MultiAgentEnv,
+#     policy_A: PolicyBase,
+#     policy_B: PolicyBase,
+#     init_state: torch.Tensor,
+#     T: int,
+#     dt: float = 1.0,
+# ) :
+#     re
+    
+    
 
 if __name__ == "__main__":
     import torch

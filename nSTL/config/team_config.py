@@ -13,7 +13,7 @@ obstacles = [
 ]
 
 class ConfigTeam:
-    def __init__(self, ego_choices, opp_choices, total_time_step=80, T=80, u_max=0.8, epochs = 50, lr = 1e-4, batch_size = 64,
+    def __init__(self, ego_choices, opp_choices, total_time_step=80, T=80, u_max=0.8, epochs = 400, lr = 1e-4, batch_size = 64,
                  model_dir='artifact/models/team/', data_dir='artifact/data/team/', exp_fig_dir='artifact/figs/team/'):
         self.ego_choices = ego_choices
         self.opp_choices = opp_choices

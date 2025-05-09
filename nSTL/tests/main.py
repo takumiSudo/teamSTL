@@ -67,26 +67,20 @@ def animate(ego_trajs, opp_trajs, obstacles, circle, save_path, interval_ms=200)
     ang = torch.linspace(0, 2 * torch.pi, 200)
     ax.plot(cx + r * torch.cos(ang), cy + r * torch.sin(ang), "#1f77b4", lw=1.5)
 
-    # fading trails
-    trails_ego = [ax.plot([], [], color="#ff7f0e", alpha=float(a))[0]
-                  for a in torch.linspace(0.2, 1.0, 10)]
-    trails_opp = [ax.plot([], [], color="#9467bd", alpha=float(a))[0]
-                  for a in torch.linspace(0.2, 1.0, 10)]
-
-    head_ego, = ax.plot([], [], "o", c="#ff7f0e", ms=6, label="ego team")
-    head_opp, = ax.plot([], [], "o", c="#9467bd", ms=6, label="opp team")
+    line_ego, = ax.plot([], [], color="#ff7f0e", lw=2, label="ego path")
+    line_opp, = ax.plot([], [], color="#9467bd", lw=2, label="opp path")
+    head_ego, = ax.plot([], [], "o", c="#ff7f0e", ms=6)
+    head_opp, = ax.plot([], [], "o", c="#9467bd", ms=6)
     ax.legend(loc="upper right")
 
     def update(t):
-        for k in range(10):
-            idx = max(t - k, 0)
-            e_xy = torch.vstack([tr[idx] for tr in ego_trajs]).detach().cpu()
-            o_xy = torch.vstack([tr[idx] for tr in opp_trajs]).detach().cpu()
-            trails_ego[k].set_data(e_xy[:, 0], e_xy[:, 1])
-            trails_opp[k].set_data(o_xy[:, 0], o_xy[:, 1])
-        head_ego.set_data(e_xy[:, 0], e_xy[:, 1])
-        head_opp.set_data(o_xy[:, 0], o_xy[:, 1])
-        return trails_ego + trails_opp + [head_ego, head_opp]
+        e_xy = torch.vstack([tr[: t + 1] for tr in ego_trajs]).cpu()
+        o_xy = torch.vstack([tr[: t + 1] for tr in opp_trajs]).cpu()
+        line_ego.set_data(e_xy[:, 0], e_xy[:, 1])
+        line_opp.set_data(o_xy[:, 0], o_xy[:, 1])
+        head_ego.set_data(e_xy[-1, 0], e_xy[-1, 1])
+        head_opp.set_data(o_xy[-1, 0], o_xy[-1, 1])
+        return [line_ego, line_opp, head_ego, head_opp]
 
     ani = animation.FuncAnimation(fig, update, frames=T,
                                   interval=interval_ms, blit=True)
@@ -99,7 +93,7 @@ def animate(ego_trajs, opp_trajs, obstacles, circle, save_path, interval_ms=200)
 # -----------------------------------------------------------------------------#
 DYN_TABLE = {
     "single_integrator":    {"fn": single_integrator,    "state_dim": 2, "ctrl_dim": 2,
-                             "lr": 3e-4, "batch": 256, "epochs": 50},
+                             "lr": 3e-4, "batch": 256, "epochs": 400},
     "double_integrator":    {"fn": double_integrator,    "state_dim": 4, "ctrl_dim": 2,
                              "lr": 3e-4, "batch": 512, "epochs": 600},
     "kinematic_model":      {"fn": kinematic_model,      "state_dim": 5, "ctrl_dim": 2,
@@ -118,10 +112,14 @@ def main():
     parser.add_argument("--dyn", default="single_integrator",
                         choices=list(DYN_TABLE.keys()),
                         help="dynamics model")
-    parser.add_argument("--iters", type=int, default=100, help="PSRO iterations")
+    parser.add_argument("--iters", type=int, default=80, help="PSRO iterations")
     parser.add_argument("--epochs", type=int, help="oracle training epochs")
     parser.add_argument("--batch", type=int, help="oracle RL batch size")
     parser.add_argument("--lr", type=float, help="oracle learning rate")
+    parser.add_argument("--ego-start", nargs=2, type=float, metavar=("X", "Y"),
+                        help="fixed start position (x y) for the ego team in [-1,1]")
+    parser.add_argument("--opp-start", nargs=2, type=float, metavar=("X", "Y"),
+                        help="fixed start position (x y) for the opponent team in [-1,1]")
     args = parser.parse_args()
 
     # pick defaults or CLI overrides
@@ -133,9 +131,18 @@ def main():
     batch_size = args.batch  or dyn_cfg["batch"]
     lr         = args.lr     or dyn_cfg["lr"]
 
-    # random start positions in [-1,1]² for each team
-    ego_start = (torch.rand(2) * 2.0 - 1.0).tolist()
-    opp_start = (torch.rand(2) * 2.0 - 1.0).tolist()
+    # use fixed start positions if provided, otherwise fall back to defaults
+    if args.ego_start:
+        ego_start = list(args.ego_start)
+    else:
+        ego_start = [-1.0, -1.0]   # default fixed position for ego team
+
+    if args.opp_start:
+        opp_start = list(args.opp_start)
+    else:
+        opp_start = [1.0, 1.0]     # default fixed position for opponent team
+        
+
 
     cfg = ConfigTeam(ego_start, opp_start)
     cfg.fsp_iteration = args.iters
@@ -149,7 +156,8 @@ def main():
     wandb.init(project=f"team-stl-psro_{args.dyn}", name=run_name,
                config={"iters": args.iters, "epochs": epochs,
                        "batch": batch_size, "lr": lr})
-
+    print(f"EGO STARTING @ {ego_start}")
+    print(f"OPP STARTING @ {opp_start}")
     driver = PSRODriver(cfg, dyn_fn, state_dim, ctrl_dim, team_size=2)
 
     # track robustness of newest BR pair
@@ -167,7 +175,23 @@ def main():
         # adaptive GIF cadence: dense early, then every 20 iters
         if it < 20 or it % 20 == 0 or it == args.iters - 1:
             T_vis = cfg.T
-            traj = batched_rollout(driver.env, driver.pop_A[-1], driver.pop_B[-1], T=T_vis)
+            # ------------------------------------------------------------------
+            # deterministic initial states for visualisation (B = 1)
+            B_vis      = 1
+            state_dim  = driver.env.state_dim
+            total_sd   = driver.env.n_agents * state_dim
+            init_vis   = torch.zeros(B_vis, total_sd, device=driver.cfg.device)
+
+            # order: ego-0, ego-1, opp-0, opp-1
+            init_vis[0, 0:2] = torch.tensor(ego_start)  # ego   agent 0
+            init_vis[0, 2:4] = torch.tensor(ego_start)  # ego   agent 1
+            init_vis[0, 4:6] = torch.tensor(opp_start)  # opp   agent 0
+            init_vis[0, 6:8] = torch.tensor(opp_start)  # opp   agent 1
+            # ------------------------------------------------------------------
+            driver.env.reset(init_vis)                            # set the fixed start
+            traj = batched_rollout(driver.env,
+                       driver.pop_A[-1], driver.pop_B[-1],
+                       T=T_vis)                      # no init_states kwarg
             sd = driver.env.state_dim
             pos_dim = 2
             ego = [traj[:, :, i*sd:(i*sd)+pos_dim] for i in range(2)]
@@ -179,8 +203,24 @@ def main():
             wandb.save(gif_path)
 
     # final robustness & GIF
-    T_final = cfg.T
-    traj = batched_rollout(driver.env, driver.pop_A[-1], driver.pop_B[-1], T=T_final)
+    T_vis = cfg.T
+    # ------------------------------------------------------------------
+    # deterministic initial states for visualisation (B = 1)
+    B_vis      = 1
+    state_dim  = driver.env.state_dim
+    total_sd   = driver.env.n_agents * state_dim
+    init_vis   = torch.zeros(B_vis, total_sd, device=driver.cfg.device)
+
+    # order: ego-0, ego-1, opp-0, opp-1
+    init_vis[0, 0:2] = torch.tensor(ego_start)  # ego   agent 0
+    init_vis[0, 2:4] = torch.tensor(ego_start)  # ego   agent 1
+    init_vis[0, 4:6] = torch.tensor(opp_start)  # opp   agent 0
+    init_vis[0, 6:8] = torch.tensor(opp_start)  # opp   agent 1
+    # ------------------------------------------------------------------
+    driver.env.reset(init_vis)                            # set the fixed start
+    traj = batched_rollout(driver.env,
+                driver.pop_A[-1], driver.pop_B[-1],
+                T=T_vis)       
     sd = driver.env.state_dim
     pos_dim = 2
     ego = [traj[:, :, i*sd:(i*sd)+pos_dim] for i in range(2)]
